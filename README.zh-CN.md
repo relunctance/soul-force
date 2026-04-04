@@ -118,15 +118,11 @@ git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-
 
 > ⚠️ **为什么需要 `--force`？** ClawHub 使用 VirusTotal 扫描所有插件。任何调用外部 API（如 MiniMax）的插件都会被标记为"suspicious"——这是误报。`--force` 参数用于绕过这个误报。SoulForce 只调用你已配置的 LLM API，不会做任何可疑操作。
 
-### 2. 配置 API Key
+### 2. 运行
+
+> 无需配置 API Key — SoulForce 自动读取 OpenClaw 的配置。
 
 ```bash
-export MINIMAX_API_KEY="your-minimax-api-key"
-```
-
-> **OpenClaw 用户**：API Key 由 OpenClaw 自动注入，无需手动设置。
-
-### 3. 运行
 
 ```bash
 # 手动触发
@@ -139,7 +135,7 @@ python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
 python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ```
 
-### 4. 定时任务（推荐）
+### 3. 定时任务（推荐）
 
 ```bash
 # 每2小时自动进化

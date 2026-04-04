@@ -81,7 +81,7 @@ class SoulForgeConfig:
         self._config.update(loaded)
 
     def _apply_env_overrides(self) -> None:
-        """Apply environment variable overrides."""
+        """Apply environment variable overrides, then fall back to OpenClaw config."""
         # Support both OPENAI_API_KEY and MINIMAX_API_KEY
         openai_key_env = self._config.get("openai_api_key_env", "OPENAI_API_KEY")
         minimax_key_env = self._config.get("minimax_api_key_env", "MINIMAX_API_KEY")
@@ -89,6 +89,9 @@ class SoulForgeConfig:
             self._config["minimax_api_key"] = os.environ[openai_key_env]
         elif minimax_key_env in os.environ:
             self._config["minimax_api_key"] = os.environ[minimax_key_env]
+        else:
+            # Fall back to reading from OpenClaw's own config file
+            self._config["minimax_api_key"] = self._get_openclaw_api_key()
 
         # Support both OPENAI_BASE_URL and MINIMAX_BASE_URL
         openai_url_env = self._config.get("openai_base_url_env", "OPENAI_BASE_URL")
@@ -97,10 +100,51 @@ class SoulForgeConfig:
             self._config["openai_base_url"] = os.environ[openai_url_env]
         elif minimax_url_env in os.environ:
             self._config["minimax_base_url"] = os.environ[minimax_url_env]
+        else:
+            self._config["openai_base_url"] = self._get_openclaw_base_url()
 
         # Workspace override
         if "SOULFORGE_WORKSPACE" in os.environ:
             self._config["workspace"] = os.environ["SOULFORGE_WORKSPACE"]
+
+    def _get_openclaw_api_key(self) -> str:
+        """Read API key from OpenClaw's config file."""
+        openclaw_config = Path.home() / ".openclaw" / "openclaw.json"
+        if not openclaw_config.exists():
+            return ""
+        try:
+            import json as _json
+            with open(openclaw_config, "r") as f:
+                cfg = _json.load(f)
+            # Navigate to providers.minimax.apiKey or similar
+            providers = cfg.get("providers", {})
+            for name, p in providers.items():
+                if isinstance(p, dict):
+                    key = p.get("apiKey") or p.get("api_key")
+                    if key:
+                        return key
+            return ""
+        except Exception:
+            return ""
+
+    def _get_openclaw_base_url(self) -> str:
+        """Read base URL from OpenClaw's config file."""
+        openclaw_config = Path.home() / ".openclaw" / "openclaw.json"
+        if not openclaw_config.exists():
+            return "https://api.minimax.chat/v1"
+        try:
+            import json as _json
+            with open(openclaw_config, "r") as f:
+                cfg = _json.load(f)
+            providers = cfg.get("providers", {})
+            for name, p in providers.items():
+                if isinstance(p, dict):
+                    url = p.get("baseUrl") or p.get("base_url")
+                    if url:
+                        return url.rstrip("/")
+            return "https://api.minimax.chat/v1"
+        except Exception:
+            return "https://api.minimax.chat/v1"
 
     def get(self, key: str, default=None):
         """Get a configuration value."""

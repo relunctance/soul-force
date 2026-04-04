@@ -6,10 +6,6 @@ metadata:
     requires:
       bins:
         - python3
-    env:
-      MINIMAX_API_KEY:
-        description: MiniMax API key for pattern analysis
-        required: true
 ---
 
 # SoulForce Skill
@@ -62,14 +58,6 @@ exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
 ```
 exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ```
-
-## Configuration
-
-```bash
-export MINIMAX_API_KEY="your-api-key"
-```
-
-> OpenClaw users: API key injected automatically.
 
 ## How It Works
 

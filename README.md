@@ -118,15 +118,11 @@ git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-
 
 > ⚠️ **Why `--force`?** ClawHub uses VirusTotal to scan all skills. Any skill that calls an external API (like MiniMax) is flagged as "suspicious" — this is a false positive. The `--force` flag bypasses this warning so legitimate tools can be installed. SoulForce only calls the LLM API you already configured.
 
-### 2. Configure API Key
+### 2. Run
+
+> No API key configuration needed — SoulForce automatically reads your OpenClaw settings.
 
 ```bash
-export MINIMAX_API_KEY="your-minimax-api-key"
-```
-
-> **OpenClaw users**: API key is injected automatically by OpenClaw. No manual setup needed.
-
-### 3. Run
 
 ```bash
 # Manual trigger
@@ -139,7 +135,7 @@ python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
 python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ```
 
-### 4. Schedule (Recommended)
+### 3. Schedule (Recommended)
 
 ```bash
 # Every 2 hours via OpenClaw cron
