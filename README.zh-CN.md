@@ -116,6 +116,8 @@ clawhub install soul-force --force
 git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
 ```
 
+> ⚠️ **为什么需要 `--force`？** ClawHub 使用 VirusTotal 扫描所有插件。任何调用外部 API（如 MiniMax）的插件都会被标记为"suspicious"——这是误报。`--force` 参数用于绕过这个误报。SoulForce 只调用你已配置的 LLM API，不会做任何可疑操作。
+
 ### 2. 配置 API Key
 
 ```bash

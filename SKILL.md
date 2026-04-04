@@ -37,6 +37,14 @@ SoulForce fixes this.
 
 ## Quick Start
 
+### Install
+
+```bash
+clawhub install soul-force --force
+```
+
+> ⚠️ `--force` is needed because ClawHub's VirusTotal scan flags any skill calling external APIs as "suspicious" — false positive. SoulForce only calls your configured LLM.
+
 ### Run Evolution
 
 ```

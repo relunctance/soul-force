@@ -116,6 +116,8 @@ clawhub install soul-force --force
 git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
 ```
 
+> ⚠️ **Why `--force`?** ClawHub uses VirusTotal to scan all skills. Any skill that calls an external API (like MiniMax) is flagged as "suspicious" — this is a false positive. The `--force` flag bypasses this warning so legitimate tools can be installed. SoulForce only calls the LLM API you already configured.
+
 ### 2. Configure API Key
 
 ```bash
