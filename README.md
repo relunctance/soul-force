@@ -58,27 +58,126 @@ Each agent's data is **physically isolated** — no cross-contamination:
 
 ---
 
-## Before vs After
+## Before vs After — A Real Example
 
-**Before (Static):**
-```
-SOUL.md (written 3 months ago)
-├── Communication: Be concise
-├── Role: Team coordinator
-└── Behavior: (never changes)
+### SOUL.md
+
+**Before (static, written once):**
+
+```markdown
+# SOUL.md
+
+## Who I Am
+
+I'm an AI assistant that helps with tasks.
+
+## How I Work
+
+I try to be helpful and accurate.
 ```
 
-**After (Continuously Evolving):**
+**After running SoulForge for 1 week:**
+
+```markdown
+# SOUL.md
+
+## Who I Am
+
+I'm an AI assistant that helps with tasks.
+
+## How I Work
+
+I try to be helpful and accurate.
+
+---
+
+<!-- SoulForge Update | 2026-04-05 -->
+## Behavior: User Prefers Numbered Options
+
+**Source**: memory/2026-04-04.md, memory/2026-04-05.md
+**Pattern Type**: communication
+**Confidence**: High (observed 4 times)
+
+**Content**:
+User gets overwhelmed by long text options. ALWAYS present choices as numbered lists (1/2/3) instead of paragraphs. Keep it scannable.
+
+<!-- /SoulForge Update -->
+
+<!-- SoulForge Update | 2026-04-03 -->
+## Behavior: User Corrected "Do It Yourself" Pattern
+
+**Source**: .learnings/LEARNINGS.md (correction)
+**Pattern Type**: correction
+**Confidence**: High (observed 3 times)
+
+**Content**:
+When user says "why does this keep happening" or expresses frustration, it means I should fix the root cause, not just patch symptoms. User values prevention over remediation.
+
+<!-- /SoulForge Update -->
 ```
-SOUL.md (auto-evolving)
-├── Communication: Be concise
-├── Role: Team coordinator
-├── Behavior:
-│   ├── ✅ User said "options too long" → Added "use numbered lists"
-│   ├── ✅ User prefers automation → Added "automate when possible"
-│   └── ✅ Claude Code rate limit hit → Added "avoid dense calls"
-└── Evolution log: 12 updates, 4 new patterns
+
+---
+
+### USER.md
+
+**Before (generic, never updated):**
+
+```markdown
+# USER.md
+
+## User
+
+A person who uses this AI assistant.
 ```
+
+**After running SoulForge for 1 week:**
+
+```markdown
+# USER.md
+
+## User
+
+A person who uses this AI assistant.
+
+---
+
+<!-- SoulForge Update | 2026-04-04 -->
+## Discovered: User Works on VPN Project
+
+**Source**: memory/2026-04-04.md
+**Pattern Type**: project
+**Confidence**: High (observed 2 times)
+
+**Content**:
+User is building "SwiftPass VPN" - a subscription VPN service for Russian market. Uses XrayR/sing-box, Cloudflare, USDT+Stripe payments. Team: main + wukong + bajie + bailong + tseng.
+
+<!-- /SoulForge Update -->
+
+<!-- SoulForge Update | 2026-04-05 -->
+## Discovered: User Hates Manual Steps
+
+**Source**: memory/2026-04-05.md
+**Pattern Type**: preference
+**Confidence**: High (observed 5 times)
+
+**Content**:
+User repeatedly asks to "automate this". Never suggests manual workarounds. If a task can be scripted, do it without asking.
+
+<!-- /SoulForge Update -->
+```
+
+---
+
+### What Changed
+
+| File | Before | After |
+|------|--------|-------|
+| SOUL.md | 150 chars, 0 updates | 850 chars, 12 updates, 4 new behavior patterns |
+| USER.md | 80 chars, static | 620 chars, 6 updates, project + preferences tracked |
+| IDENTITY.md | Empty | Full team structure documented |
+| MEMORY.md | Empty | 3 important decisions recorded |
+
+**The AI becomes genuinely smarter over time.**
 
 ---
 
