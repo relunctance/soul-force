@@ -1,6 +1,37 @@
 """
 SoulForge SoulEvolver
-Safely updates workspace files with discovered patterns.
+
+Safely evolves workspace files by applying discovered patterns.
+
+Safety features:
+1. Incremental updates: Appends update blocks, never overwrites existing content
+2. Backup before write: Every modification creates a timestamped backup
+3. Duplicate detection: Skips patterns already present in the target file
+4. Dry-run mode: Preview changes without writing
+5. Per-agent isolation: Each agent has its own backup/state directories
+
+Update block format:
+    <!-- SoulForge Update | 2026-04-05T12:00:00+08:00 -->
+    ## Pattern Summary
+
+    **Source**: memory/2026-04-05.md
+    **Pattern Type**: behavior
+    **Confidence**: High (observed 4 times)
+
+    **Content**:
+    Pattern content here.
+
+    <!-- /SoulForge Update -->
+
+Multi-agent isolation:
+    - main workspace:      .soulforge-main/backups/
+    - wukong workspace:    .soulforge-wukong/backups/
+    - tseng workspace:     .soulforge-tseng/backups/
+
+Backup management:
+    - Keeps last 10 backups per file
+    - Timestamped with ISO format: FILENAME.YYYYMMDD_HHMMSS.bak
+    - Old backups auto-cleaned on each write
 """
 
 import os

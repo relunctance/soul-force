@@ -1,6 +1,6 @@
 ---
 name: soul-force
-description: "SoulForce - AI Agent Memory Evolution System. Makes your OpenClaw smarter with every conversation. Auto-evolves SOUL.md, USER.md, IDENTITY.md, MEMORY.md by analyzing memory patterns via MiniMax API. The core problem solved: OpenClaw doesn't auto-update its identity files. Use when: you want your AI to learn from corrections, discover recurring patterns, and evolve its behavior automatically. NOT for: one-shot tasks, real-time responses, or when manual curation is preferred."
+description: "OpenClaw - AI Agent Memory Evolution System. Makes your OpenClaw smarter with every conversation. Auto-evolves SOUL.md, USER.md, IDENTITY.md, MEMORY.md by analyzing memory patterns via your configured LLM. The core problem solved: OpenClaw doesn't auto-update its identity files. Use when: you want your AI to learn from corrections, discover recurring patterns, and evolve its behavior automatically. NOT for: one-shot tasks, real-time responses, or when manual curation is preferred."
 metadata:
   openclaw:
     requires:

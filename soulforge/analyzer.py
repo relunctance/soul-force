@@ -1,6 +1,28 @@
 """
 SoulForge Pattern Analyzer
-Uses MiniMax API to analyze memory entries and discover patterns.
+
+Uses the configured LLM (OpenClaw's built-in model) to analyze memory entries
+and discover recurring patterns worth promoting to identity files.
+
+How it works:
+1. Prepare memory entries as structured text
+2. Build a prompt with existing file content (to avoid duplicates)
+3. Call the LLM API with system prompt + user prompt
+4. Parse JSON response into DiscoveredPattern objects
+5. Filter by evidence count threshold
+
+Pattern structure:
+- target_file: Which file to update (SOUL.md, USER.md, etc.)
+- category: Type of pattern (behavior, preference, decision, etc.)
+- summary: One-line description
+- content: The actual content to add
+- confidence: 0.0-1.0 based on evidence strength
+- evidence_count: How many times this pattern was observed
+
+API compatibility:
+- Supports both OpenAI-compatible and MiniMax API formats
+- Auto-detects based on base URL configuration
+- Falls back gracefully on API errors
 """
 
 import json

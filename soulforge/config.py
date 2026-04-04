@@ -1,5 +1,19 @@
 """
 SoulForge Configuration Management
+
+This module handles all configuration for SoulForge, including:
+- Loading settings from config files
+- Reading OpenClaw's built-in API settings (zero-config)
+- Deriving agent-specific paths for multi-agent isolation
+- Environment variable overrides
+
+Architecture:
+    Config sources (in priority order):
+    1. Runtime overrides (from CLI args)
+    2. Environment variables
+    3. Config file (soulforge/config.json)
+    4. OpenClaw config (~/.openclaw/openclaw.json)
+    5. DEFAULT_CONFIG values
 """
 
 import os

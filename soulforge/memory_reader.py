@@ -1,6 +1,28 @@
 """
 SoulForge Memory Reader
-Reads memory files from multiple sources: daily logs, learnings, hawk-bridge vector store.
+
+Reads memory entries from multiple sources in the agent's workspace:
+
+1. Daily memory logs (memory/YYYY-MM-DD.md)
+   - Raw conversation logs from each day
+   - Parsed by filename date
+
+2. Learnings directory (.learnings/)
+   - LEARNINGS.md: Corrections, insights, knowledge gaps, best practices
+   - ERRORS.md: Command failures and integration errors
+   - FEATURE_REQUESTS.md: User-requested capabilities
+
+3. hawk-bridge vector store (optional)
+   - LanceDB-based semantic memory
+   - Read-only access to existing vectors
+
+The reader normalizes all sources into a unified MemoryEntry format,
+sorts by timestamp, and provides filtering by category.
+
+Key design:
+- Read-only: Never modifies any source files
+- Incremental: All sources support incremental reads
+- Safe: Gracefully skips unavailable sources
 """
 
 import os
