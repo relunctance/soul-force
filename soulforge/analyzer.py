@@ -54,7 +54,7 @@ class PatternAnalyzer:
     """
     Analyzes memory entries to discover patterns and generate updates.
 
-    Uses MiniMax API to:
+    Uses OpenClaw's configured LLM (MiniMax by default) to:
     1. Analyze memory entries for recurring patterns
     2. Map patterns to appropriate target files
     3. Generate update content in the correct format
@@ -143,9 +143,13 @@ Return ONLY JSON, no other text."""
             config: SoulForgeConfig instance with API key and settings
         """
         self.config = config
+        # Use OpenClaw's configured API key and endpoint
         self._api_key = config.minimax_api_key
-        self._base_url = config.minimax_base_url
-        self._model = config.get("model", "MiniMax-M2.7")
+        self._base_url = config.get("openai_base_url") or config.minimax_base_url
+        # Use OpenClaw's default model, fallback to MiniMax-M2
+        self._model = config.get("model") or "MiniMax-M2"
+        # Support both OpenAI-compatible and MiniMax API formats
+        self._api_format = "openai" if "/v1" in self._base_url else "minimax"
 
     def analyze(
         self,
@@ -167,7 +171,7 @@ Return ONLY JSON, no other text."""
             return []
 
         if not self._api_key:
-            logger.error("MiniMax API key not configured")
+            logger.error("LLM API key not configured. Set MINIMAX_API_KEY or OPENAI_API_KEY environment variable.")
             return []
 
         # Prepare memory entries text
@@ -179,8 +183,8 @@ Return ONLY JSON, no other text."""
             existing_content=self._format_existing_content(existing_content)
         )
 
-        # Call MiniMax API
-        response = self._call_minimax(self.SYSTEM_PROMPT, user_prompt)
+        # Call the configured LLM
+        response = self._call_llm(self.SYSTEM_PROMPT, user_prompt)
 
         # Parse response
         patterns = self._parse_response(response)
@@ -213,9 +217,10 @@ Return ONLY JSON, no other text."""
                 lines.append("...(truncated)...")
         return "\n".join(lines)
 
-    def _call_minimax(self, system_prompt: str, user_prompt: str) -> str:
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Call MiniMax API for chat completion.
+        Call the configured LLM for chat completion.
+        Supports both OpenAI-compatible and MiniMax API formats.
 
         Args:
             system_prompt: System prompt
@@ -227,17 +232,30 @@ Return ONLY JSON, no other text."""
         import urllib.request
         import urllib.error
 
-        url = f"{self._base_url}/text/chatcompletion_v2"
+        # Build messages
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
 
-        payload = {
-            "model": self._model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.3,  # Low temperature for structured output
-            "max_tokens": 4096,
-        }
+        if self._api_format == "openai":
+            # OpenAI-compatible format
+            url = f"{self._base_url}/chat/completions"
+            payload = {
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            }
+        else:
+            # MiniMax format
+            url = f"{self._base_url}/text/chatcompletion_v2"
+            payload = {
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            }
 
         data = json.dumps(payload).encode("utf-8")
 
@@ -251,10 +269,13 @@ Return ONLY JSON, no other text."""
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 response_data = json.loads(resp.read().decode("utf-8"))
-                return response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if self._api_format == "openai":
+                    return response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                else:
+                    return response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8") if e.fp else ""
-            logger.error(f"MiniMax API error: {e.code} - {error_body}")
+            logger.error(f"LLM API error: {e.code} - {error_body}")
             return '{"proposed_updates": [], "analysis_summary": "API error"}'
         except Exception as e:
             logger.error(f"MiniMax API call failed: {e}")

@@ -29,8 +29,10 @@ class SoulForgeConfig:
         "backup_enabled": True,
         "backup_dir": None,  # Derived from workspace to ensure agent isolation
         "state_dir": None,   # Derived from workspace to ensure agent isolation
-        "minimax_api_key_env": "MINIMAX_API_KEY",
-        "model": "MiniMax-M2.7",
+        "minimax_api_key_env": "MINIMAX_API_KEY",  # Deprecated, use openai_api_key_env
+        "openai_api_key_env": "OPENAI_API_KEY",     # Primary API key env var
+        "openai_base_url_env": "OPENAI_BASE_URL",  # Primary base URL env var
+        "model": None,  # Use OpenClaw's default model (auto-detect)
         "log_level": "INFO",
         "dry_run": False,
         "hawk_bridge_enabled": True,
@@ -80,10 +82,21 @@ class SoulForgeConfig:
 
     def _apply_env_overrides(self) -> None:
         """Apply environment variable overrides."""
-        # MiniMax API Key
-        api_key_env = self._config.get("minimax_api_key_env", "MINIMAX_API_KEY")
-        if api_key_env in os.environ:
-            self._config["minimax_api_key"] = os.environ[api_key_env]
+        # Support both OPENAI_API_KEY and MINIMAX_API_KEY
+        openai_key_env = self._config.get("openai_api_key_env", "OPENAI_API_KEY")
+        minimax_key_env = self._config.get("minimax_api_key_env", "MINIMAX_API_KEY")
+        if openai_key_env in os.environ:
+            self._config["minimax_api_key"] = os.environ[openai_key_env]
+        elif minimax_key_env in os.environ:
+            self._config["minimax_api_key"] = os.environ[minimax_key_env]
+
+        # Support both OPENAI_BASE_URL and MINIMAX_BASE_URL
+        openai_url_env = self._config.get("openai_base_url_env", "OPENAI_BASE_URL")
+        minimax_url_env = "MINIMAX_BASE_URL"
+        if openai_url_env in os.environ:
+            self._config["openai_base_url"] = os.environ[openai_url_env]
+        elif minimax_url_env in os.environ:
+            self._config["minimax_base_url"] = os.environ[minimax_url_env]
 
         # Workspace override
         if "SOULFORGE_WORKSPACE" in os.environ:
@@ -144,10 +157,10 @@ class SoulForgeConfig:
 
     @property
     def minimax_base_url(self) -> str:
-        """Get MiniMax API base URL."""
+        """Get API base URL. Prefers OPENAI_BASE_URL, falls back to MINIMAX_BASE_URL."""
         return self._config.get(
-            "minimax_base_url",
-            os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
+            "openai_base_url",
+            os.environ.get("OPENAI_BASE_URL", self._config.get("minimax_base_url", "https://api.minimax.chat/v1"))
         )
 
     @property
