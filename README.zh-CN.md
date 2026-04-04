@@ -46,7 +46,7 @@
 | tseng | `.soulforge-tseng/backups/` | `.soulforge-tseng/` |
 
 ### 🧠 hawk-bridge 无缝集成
-- 读取 hawk-bridge 的 **LanceDB 向量记忆库**（33条记忆向量）
+- 读取 hawk-bridge 的 **LanceDB 向量记忆库**
 - 增量处理，只分析新记忆，不重复
 - 进化结果与 hawk-bridge 共用同一套数据源
 

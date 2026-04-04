@@ -92,7 +92,7 @@ With hawk-bridge installed, SoulForce gains:
 
 | Feature | Description |
 |---------|-------------|
-| Semantic Memory | Searches 33 vector memories from hawk-bridge |
+| Semantic Memory | Searches vector memories from hawk-bridge |
 | Cross-Session | hawk-bridge memories auto-analyzed |
 | Incremental | Only processes new memories |
 | Dual Backup | Vector layer (hawk) + File layer (soulforce) |

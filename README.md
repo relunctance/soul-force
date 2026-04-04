@@ -46,7 +46,7 @@ Each agent's data is **physically isolated** — no cross-contamination:
 | tseng | `.soulforge-tseng/backups/` | `.soulforge-tseng/` |
 
 ### 🧠 hawk-bridge Integration
-- Reads hawk-bridge's **LanceDB vector memory** (33 vectors)
+- Reads hawk-bridge's **LanceDB vector memory**
 - Incremental processing — only analyzes new memories
 - Shared data source with hawk-bridge for dual-layer backup
 
