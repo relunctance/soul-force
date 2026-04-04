@@ -121,7 +121,97 @@ class SoulEvolver:
                 results["errors"].append({filename: str(e)})
 
         results["changes"] = self._changes_made
+
+        # Write changelog (only if not dry-run and changes were made)
+        if not dry_run and results["patterns_applied"] > 0:
+            self._write_changelog(results)
+
         return results
+
+    def _write_changelog(self, results: Dict[str, Any]) -> None:
+        """
+        Write a changelog entry for this evolution run.
+        
+        Creates or appends to CHANGELOG.md and CHANGELOG.zh-CN.md in the
+        agent's state directory.
+        
+        Args:
+            results: Results dict from apply_updates()
+        """
+        state_dir = Path(self.config.state_dir)
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
+        patterns = results.get("changes", [])
+
+        # Build English changelog entry
+        en_entry = f"""## {timestamp}
+
+### Files Updated: {len(results.get("files_updated", []))}
+{", ".join(results.get("files_updated", []))}
+
+### Patterns Applied: {results["patterns_applied"]}
+"""
+        for change in patterns:
+            en_entry += f"- **{change['file']}**: {change['pattern']}\n"
+
+        if results.get("errors"):
+            en_entry += "\n### Errors:\n"
+            for err in results["errors"]:
+                for file, error in err.items():
+                    en_entry += f"- {file}: {error}\n"
+
+        en_entry += "---\n\n"
+
+        # Build Chinese changelog entry
+        zh_entry = f"""## {timestamp}
+
+### 更新的文件：{len(results.get("files_updated", []))}
+{", ".join(results.get("files_updated", []))}
+
+### 应用的模式：{results["patterns_applied"]}
+"""
+        for change in patterns:
+            zh_entry += f"- **{change['file']}**: {change['pattern']}\n"
+
+        if results.get("errors"):
+            zh_entry += "\n### 错误：\n"
+            for err in results["errors"]:
+                for file, error in err.items():
+                    zh_entry += f"- {file}: {error}\n"
+
+        zh_entry += "---\n\n"
+
+        # Write English changelog
+        en_path = state_dir / "CHANGELOG.md"
+        if en_path.exists():
+            existing = en_path.read_text(encoding="utf-8")
+            # Find the last "---" separator and insert after it
+            parts = existing.split("---\n\n", 1)
+            if len(parts) > 1:
+                new_content = parts[0] + "---\n\n" + en_entry + parts[1]
+            else:
+                new_content = en_entry + existing
+        else:
+            new_content = "# SoulForge Changelog\n\n" + en_entry
+
+        en_path.write_text(new_content, encoding="utf-8")
+        logger.info(f"Changelog updated: {en_path}")
+
+        # Write Chinese changelog
+        zh_path = state_dir / "CHANGELOG.zh-CN.md"
+        if zh_path.exists():
+            existing = zh_path.read_text(encoding="utf-8")
+            parts = existing.split("---\n\n", 1)
+            if len(parts) > 1:
+                new_content = parts[0] + "---\n\n" + zh_entry + parts[1]
+            else:
+                new_content = zh_entry + existing
+        else:
+            new_content = "# SoulForge 更新日志\n\n" + zh_entry
+
+        zh_path.write_text(new_content, encoding="utf-8")
+        logger.info(f"Changelog updated: {zh_path}")
 
     def _apply_to_file(
         self,
@@ -355,3 +445,22 @@ class SoulEvolver:
             lines.append("")
 
         return "\n".join(lines)
+
+    def get_changelog(self, lang: str = "en") -> str:
+        """
+        Get the changelog content.
+
+        Args:
+            lang: Language code, 'en' or 'zh-CN'
+
+        Returns:
+            Changelog content as string, empty if not found
+        """
+        state_dir = Path(self.config.state_dir)
+        filename = "CHANGELOG.md" if lang == "en" else "CHANGELOG.zh-CN.md"
+        changelog_path = state_dir / filename
+
+        if not changelog_path.exists():
+            return ""
+
+        return changelog_path.read_text(encoding="utf-8")

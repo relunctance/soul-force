@@ -118,6 +118,23 @@ openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```
 
+## Changelog
+
+```bash
+# View changelog (English)
+soulforge.py changelog
+
+# View changelog (Chinese)
+soulforge.py changelog --zh
+
+# View full changelog
+soulforge.py changelog --full
+```
+
+Changelogs are stored at:
+- `.soulforge-{agent}/CHANGELOG.md` (English)
+- `.soulforge-{agent}/CHANGELOG.zh-CN.md` (Chinese)
+
 ## Exit Codes
 
 - `0` — Success

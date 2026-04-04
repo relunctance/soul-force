@@ -143,6 +143,19 @@ openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```
 
+### 4. View Changelog
+
+```bash
+# View English changelog
+soulforge.py changelog
+
+# View Chinese changelog
+soulforge.py changelog --zh
+
+# View full changelog (no truncation)
+soulforge.py changelog --full
+```
+
 ---
 
 ## Multi-Agent Usage

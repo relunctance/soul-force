@@ -543,6 +543,48 @@ _Last updated: {date}_
     return 0
 
 
+def cmd_changelog(args) -> int:
+    """
+    Show the evolution changelog.
+
+    Displays all evolution changes chronologically, newest first.
+    Supports both English and Chinese versions.
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 = success, 1 = no changelog found)
+    """
+    config = SoulForgeConfig(overrides={"workspace": args.workspace})
+    setup_logging(config.log_level)
+
+    # Determine language
+    lang = "zh-CN" if args.zh else "en"
+    lang_name = "中文" if lang == "zh-CN" else "English"
+
+    print(f"SoulForge Changelog ({lang_name}) (workspace: {config.workspace})")
+    print("=" * 50)
+
+    evolver = SoulEvolver(config.workspace, config)
+    content = evolver.get_changelog(lang)
+
+    if not content:
+        print("No changelog found yet.")
+        print("Run 'soulforge.py run' first to create evolution history.")
+        return 1
+
+    # Show first N characters as preview
+    preview_lines = content.split("\n")[:50]
+    print("\n".join(preview_lines))
+
+    if len(content.split("\n")) > 50:
+        print("\n... (truncated, use --full to see all)")
+
+    print(f"\n📄 Full changelog: {Path(config.state_dir) / ('CHANGELOG.' + lang + '.md')}")
+    return 0
+
+
 def cmd_cron(args) -> int:
     """
     Show how to set up cron scheduling.
@@ -641,6 +683,12 @@ def main() -> int:
     template_parser.add_argument("template", nargs="?", help="Specific template to show")
     template_parser.set_defaults(func=cmd_template)
 
+    # changelog command - show evolution history
+    changelog_parser = subparsers.add_parser("changelog", help="Show evolution changelog")
+    changelog_parser.add_argument("--zh", action="store_true", help="Show Chinese version")
+    changelog_parser.add_argument("--full", action="store_true", help="Show full changelog")
+    changelog_parser.set_defaults(func=cmd_changelog)
+
     # cron command - cron setup help
     cron_parser = subparsers.add_parser("cron", help="Cron setup help")
     cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
@@ -652,7 +700,8 @@ def main() -> int:
 
     # Set workspace on all subparsers
     for subparser in [run_parser, status_parser, diff_parser, stats_parser,
-                      inspect_parser, restore_parser, reset_parser, template_parser, cron_parser]:
+                      inspect_parser, restore_parser, reset_parser, template_parser,
+                      changelog_parser, cron_parser]:
         subparser.set_defaults(workspace=workspace)
 
     args = parser.parse_args()
