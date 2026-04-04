@@ -1,149 +1,155 @@
 # SoulForce
 
-**SoulForce** — AI Agent Memory Evolution System. 让 AI 智能体的灵魂在每次对话中进化。
+**SoulForce** — AI Agent Memory Evolution System. Make your OpenClaw smarter with every conversation.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 
----
-
-## 痛点 ❌ vs 解决 ✅
-
-| 痛点 | SoulForce 解决 |
-|------|---------------|
-| AI 的 SOUL.md 写完就停滞，永远一个样 | ✅ 自动分析记忆，发现新模式，更新 SOUL.md |
-| 每次纠正 AI，AI 下次还是犯同样的错 | ✅ 纠错自动记录，3次重复后自动进化 |
-| AI 不知道用户偏好，用着用着就忘了 | ✅ USER.md 自动同步用户偏好变化 |
-| 多 Agent 团队记忆互相污染 | ✅ 完全隔离，每个 Agent 有独立存储 |
-| 手动维护记忆文件太麻烦 | ✅ Cron 自动化，完全无感知进化 |
-| hawk-bridge 记忆用完就散，没有沉淀 | ✅ 与 hawk-bridge 共用向量库，自动提炼到文件层 |
+> 📖 **中文文档**: [README.zh-CN.md](README.zh-CN.md)
 
 ---
 
-## 核心特性
+## The Core Problem ❌
 
-### 🔄 自动进化
-- 读取 `memory/*.md` 每日记忆日志
-- 分析 `.learnings/` 纠错记录
-- 调用 **MiniMax API** 发现反复出现的模式
-- 自动更新 SOUL.md / USER.md / IDENTITY.md / MEMORY.md
+**OpenClaw doesn't automatically update SOUL.md, USER.md, or IDENTITY.md.**
 
-### 🏢 多 Agent 完全隔离
-每个 Agent 的数据**物理隔离**，绝不互相污染：
+You write them once. They stay the same forever. Your AI never gets smarter.
 
-| Agent | 备份目录 | 状态目录 |
-|-------|---------|---------|
+| Pain Point | SoulForce Fix |
+|------------|--------------|
+| ❌ SOUL.md goes stale after first write — AI stays the same | ✅ Auto-analyzes memory, discovers patterns, evolves SOUL.md |
+| ❌ Correct the same mistake 10 times, AI forgets | ✅ Corrections logged → auto-evolved after 3 repetitions |
+| ❌ USER.md doesn't track new preferences | ✅ USER.md auto-syncs user preference changes |
+| ❌ Multi-agent teams pollute each other's memory | ✅ Full isolation — each agent has its own storage |
+| ❌ Manual memory maintenance is tedious | ✅ Cron automation — zero effort, continuous evolution |
+| ❌ hawk-bridge memories fade without沉淀 | ✅ Integrates with hawk-bridge vector store, extracts to files |
+
+**Bottom line**: This skill makes your OpenClaw continuously smarter. Every correction, every pattern, every preference gets captured and evolved.
+
+---
+
+## Key Features
+
+### 🔄 Auto Evolution
+- Reads `memory/*.md` daily logs
+- Analyzes `.learnings/` correction records
+- Uses **MiniMax API** to detect recurring patterns
+- Auto-updates SOUL.md / USER.md / IDENTITY.md / MEMORY.md
+
+### 🏢 Multi-Agent Isolation
+Each agent's data is **physically isolated** — no cross-contamination:
+
+| Agent | Backup Dir | State Dir |
+|-------|-----------|----------|
 | main | `.soulforge-main/backups/` | `.soulforge-main/` |
 | wukong | `.soulforge-wukong/backups/` | `.soulforge-wukong/` |
 | tseng | `.soulforge-tseng/backups/` | `.soulforge-tseng/` |
 
-### 🧠 hawk-bridge 无缝集成
-- 读取 hawk-bridge 的 **LanceDB 向量记忆库**（33条记忆向量）
-- 增量处理，只分析新记忆，不重复
-- 进化结果与 hawk-bridge 共用同一套数据源
+### 🧠 hawk-bridge Integration
+- Reads hawk-bridge's **LanceDB vector memory** (33 vectors)
+- Incremental processing — only analyzes new memories
+- Shared data source with hawk-bridge for dual-layer backup
 
-### 🔒 安全设计
-- **增量更新**：只追加，不覆盖已有内容
-- **写前备份**：每次更新前自动备份
-- **去重检测**：已有内容不重复添加
-- **预览模式**：`--dry-run` 先看结果再写入
-
----
-
-## 效果演示
-
-### 使用前 vs 使用后
-
-**使用前（静态）：**
-```
-SOUL.md（写于3个月前）
-├── 沟通风格：简洁直接
-├── 团队角色：统筹协调
-└── 行为准则：（永远不变）
-```
-
-**使用后（动态进化）：**
-```
-SOUL.md（持续进化中）
-├── 沟通风格：简洁直接
-├── 团队角色：统筹协调
-├── 行为准则：
-│   ├── ✅ 用户纠正"选项太长" → 增加"给选项列序号"原则
-│   ├── ✅ 发现用户偏好"不喜手工操作" → 增加"自动化优先"原则
-│   └── ✅ 踩坑 Claude Code rate limit → 增加"避免密集调用"原则
-└── 演进记录：12条更新，4个新行为模式
-```
+### 🔒 Safety
+- **Incremental updates**: Only appends, never overwrites
+- **Backup before write**: Auto-backup before every update
+- **Dedup detection**: Skips patterns already in files
+- **Preview mode**: `--dry-run` to see changes first
 
 ---
 
-## 工作原理
+## Before vs After
+
+**Before (Static):**
+```
+SOUL.md (written 3 months ago)
+├── Communication: Be concise
+├── Role: Team coordinator
+└── Behavior: (never changes)
+```
+
+**After (Continuously Evolving):**
+```
+SOUL.md (auto-evolving)
+├── Communication: Be concise
+├── Role: Team coordinator
+├── Behavior:
+│   ├── ✅ User said "options too long" → Added "use numbered lists"
+│   ├── ✅ User prefers automation → Added "automate when possible"
+│   └── ✅ Claude Code rate limit hit → Added "avoid dense calls"
+└── Evolution log: 12 updates, 4 new patterns
+```
+
+---
+
+## How It Works
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  记忆源     │ ──▶ │   分析引擎    │ ──▶ │  进化器     │
-│  Memory    │     │  MiniMax API │     │  Safe Write │
+│  Memory    │ ──▶ │   Analyzer   │ ──▶ │  Evolver    │
+│  Sources   │     │  (MiniMax)   │     │  (Safe)     │
 └─────────────┘     └──────────────┘     └─────────────┘
      │                    │                    │
      ▼                    ▼                    ▼
-memory/*.md          模式检测              SOUL.md
-.learnings/          N≥3 触发              USER.md
-hawk-bridge          置信度评估            IDENTITY.md
+memory/*.md         Pattern Detection      SOUL.md
+.learnings/         3× threshold          USER.md
+hawk-bridge         Confidence Scoring     IDENTITY.md
                                           MEMORY.md
 ```
 
-**触发条件：**
-- 同一行为模式出现 **3 次以上**
-- 用户纠正同一问题 **2 次以上**
-- 发现新的用户偏好或项目决策
+**Triggers:**
+- Same pattern appears **3+ times**
+- User corrects same issue **2+ times**
+- New preference or decision discovered
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 1. 安装
+### 1. Install
 
 ```bash
-# 通过 clawhub（推荐）
+# Via clawhub (recommended)
 clawhub install soul-force --force
 
-# 或手动克隆
+# Manual clone
 git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
 ```
 
-### 2. 配置 API Key
+### 2. Configure API Key
 
 ```bash
 export MINIMAX_API_KEY="your-minimax-api-key"
 ```
 
-> **OpenClaw 用户**：API Key 由 OpenClaw 自动注入，无需手动设置。
+> **OpenClaw users**: API key is injected automatically by OpenClaw. No manual setup needed.
 
-### 3. 运行
+### 3. Run
 
 ```bash
-# 手动触发
+# Manual trigger
 python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run
 
-# 预览模式（只查看，不写入）
+# Preview mode (no writes)
 python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
 
-# 查看状态
+# Check status
 python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ```
 
-### 4. 定时任务（推荐）
+### 4. Schedule (Recommended)
 
 ```bash
-# 通过 OpenClaw cron，每2小时自动进化
+# Every 2 hours via OpenClaw cron
 openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```
 
 ---
 
-## 多 Agent 使用
+## Multi-Agent Usage
 
-每个 Agent 运行自己的实例，指定独立 workspace：
+Each agent runs its own instance with isolated workspace:
 
 ```bash
 # main agent
@@ -158,59 +164,59 @@ python3 soulforge.py run --workspace ~/.openclaw/workspace-tseng
 
 ---
 
-## hawk-bridge 集成效果
+## hawk-bridge Integration
 
-**安装 hawk-bridge 后，SoulForce 额外获得：**
+**With hawk-bridge installed, SoulForce gains:**
 
-| 功能 | 说明 |
-|------|------|
-| 语义记忆搜索 | 从 33 条向量记忆中检索相关内容 |
-| 跨会话记忆 | hawk-bridge 的记忆自动被 SoulForce 分析 |
-| 增量进化 | 只处理新记忆，不重复分析已有内容 |
-| 双层备份 | 向量层（hawk）+ 文件层（soulforce）双重保险 |
+| Feature | Description |
+|---------|-------------|
+| Semantic Search | Searches 33 vector memories from hawk-bridge |
+| Cross-Session | hawk-bridge memories auto-analyzed |
+| Incremental | Only processes new memories |
+| Dual Backup | Vector layer (hawk) + File layer (soulforce) |
 
 ```bash
-# 先安装 hawk-bridge（如果还没有）
+# Install hawk-bridge first (if not present)
 clawhub install hawk-bridge --force
 
-# 然后 SoulForce 自动读取 hawk-bridge 的记忆
-python3 soulforge.py run  # 会自动检测 hawk-bridge
+# SoulForce auto-detects hawk-bridge
+python3 soulforge.py run
 ```
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```
 soul-force/
-├── SKILL.md                    # OpenClaw Skill 定义
-├── README.md                   # 英文文档
-├── README.zh-CN.md            # 中文文档
+├── SKILL.md                    # OpenClaw Skill definition
+├── README.md                   # English documentation
+├── README.zh-CN.md           # 中文文档
 ├── soulforce/
 │   ├── __init__.py
-│   ├── config.py              # 配置（多 Agent 隔离）
-│   ├── memory_reader.py        # 多源记忆读取
-│   ├── analyzer.py            # MiniMax API 分析
-│   └── evolver.py             # 安全文件更新
+│   ├── config.py              # Config (multi-agent isolation)
+│   ├── memory_reader.py        # Multi-source memory reading
+│   ├── analyzer.py            # MiniMax API analyzer
+│   └── evolver.py             # Safe file updates
 ├── scripts/
-│   └── soulforge.py            # CLI 入口
+│   └── soulforge.py            # CLI entry point
 ├── references/
-│   └── ARCHITECTURE.md        # 技术架构
+│   └── ARCHITECTURE.md        # Technical architecture
 └── tests/
-    └── test_soulforge.py       # 单元测试（11/11 通过）
+    └── test_soulforge.py       # Unit tests (11/11 passing)
 ```
 
 ---
 
-## 环境要求
+## Requirements
 
 - Python 3.10+
 - MiniMax API Key
-- OpenClaw（可选，用于 cron）
-- hawk-bridge（可选，增强向量记忆）
+- OpenClaw (optional, for cron)
+- hawk-bridge (optional, for vector memory)
 
 ---
 
 ## License
 
-MIT License - 参见 [LICENSE](LICENSE)
+MIT License — see [LICENSE](LICENSE)

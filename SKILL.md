@@ -1,6 +1,6 @@
 ---
 name: soul-force
-description: "SoulForce - AI Agent Memory Evolution System. Automatically analyzes memory files and evolves SOUL.md, USER.md, IDENTITY.md, and other workspace identity files using MiniMax API. Triggers when: agent accumulates new patterns in memory/*.md or .learnings/, needs to update behavioral guidelines, discovers recurring user preferences, or evolves team workflows. Use when: you want your AI to become smarter over time automatically, need to propagate learnings across sessions, or want automatic identity file maintenance. NOT for: one-shot tasks, real-time responses, or when manual curation is preferred."
+description: "SoulForce - AI Agent Memory Evolution System. Makes your OpenClaw smarter with every conversation. Auto-evolves SOUL.md, USER.md, IDENTITY.md, MEMORY.md by analyzing memory patterns via MiniMax API. The core problem solved: OpenClaw doesn't auto-update its identity files. Use when: you want your AI to learn from corrections, discover recurring patterns, and evolve its behavior automatically. NOT for: one-shot tasks, real-time responses, or when manual curation is preferred."
 metadata:
   openclaw:
     requires:
@@ -14,18 +14,26 @@ metadata:
 
 # SoulForce Skill
 
-SoulForce automatically evolves your AI agent's identity files by analyzing memory sources and discovering patterns over time.
+**SoulForce** makes your OpenClaw continuously smarter by auto-evolving identity files.
 
-## Pain Points Solved ❌ → ✅
+> 📖 **中文说明**: [README.zh-CN.md](README.zh-CN.md)
+
+## The Core Problem ❌
+
+**OpenClaw doesn't auto-update SOUL.md, USER.md, or IDENTITY.md.** Your AI never gets smarter.
+
+SoulForce fixes this.
+
+## Pain Points Solved
 
 | Pain Point | SoulForce Solution |
-|------------|-------------------|
-| SOUL.md goes stale after first write | ✅ Auto-analyzes memory, discovers new patterns |
-| Same corrections repeated endlessly | ✅ Corrections logged → auto-evolved after 3× |
-| User preferences forgotten | ✅ USER.md auto-syncs preference changes |
-| Multi-agent memory contamination | ✅ Full isolation per agent workspace |
-| Manual memory maintenance | ✅ Cron automation, zero effort |
-| hawk-bridge memories fade away | ✅ Integrates with hawk-bridge vector store |
+|------------|------------------|
+| ❌ SOUL.md goes stale after first write | ✅ Auto-evolves from memory patterns |
+| ❌ Same corrections repeated endlessly | ✅ Corrections → auto-evolved after 3× |
+| ❌ User preferences forgotten | ✅ USER.md auto-syncs preferences |
+| ❌ Multi-agent memory contamination | ✅ Full isolation per workspace |
+| ❌ Manual memory maintenance | ✅ Cron automation — zero effort |
+| ❌ hawk-bridge memories fade away | ✅ Integrates with hawk-bridge vector store |
 
 ## Quick Start
 
@@ -49,13 +57,11 @@ exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 
 ## Configuration
 
-Set your MiniMax API key:
-
 ```bash
 export MINIMAX_API_KEY="your-api-key"
 ```
 
-> **OpenClaw users**: API key is injected automatically. Manual setting not needed.
+> OpenClaw users: API key injected automatically.
 
 ## How It Works
 
@@ -63,10 +69,10 @@ export MINIMAX_API_KEY="your-api-key"
 memory/*.md + .learnings/ + hawk-bridge → MiniMax Analysis → Pattern Discovery → File Updates
 ```
 
-### Trigger Conditions
+**Trigger Conditions:**
 
-| File | Triggers |
-|------|----------|
+| File | Trigger |
+|------|---------|
 | SOUL.md | Same behavior 3+ times, user corrections 2+ times |
 | USER.md | New preferences, project changes |
 | IDENTITY.md | Role/responsibility changes |
@@ -84,18 +90,6 @@ Each agent has **completely isolated** storage:
 ~/.openclaw/workspace-tseng/  → .soulforge-tseng/
 ```
 
-Each agent runs its own cron job:
-
-```bash
-# For main
-openclaw cron add --name soulforce-evolve --every 120m \
-  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
-
-# For wukong
-openclaw cron add --name soulforce-evolve-wukong --every 120m \
-  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --workspace ~/.openclaw/workspace-wukong"
-```
-
 ## hawk-bridge Integration
 
 With hawk-bridge installed, SoulForce gains:
@@ -108,11 +102,8 @@ With hawk-bridge installed, SoulForce gains:
 | Dual Backup | Vector layer (hawk) + File layer (soulforce) |
 
 ```bash
-# Install hawk-bridge first (if not present)
 clawhub install hawk-bridge --force
-
-# SoulForce auto-detects hawk-bridge on next run
-python3 soulforge.py run
+python3 soulforge.py run  # auto-detects hawk-bridge
 ```
 
 ## Safety
@@ -123,10 +114,13 @@ python3 soulforge.py run
 - **Dedup**: Skips patterns already in files
 - **Threshold**: Patterns need 3+ occurrences before promoting
 
-## Files Generated
+## Schedule (Recommended)
 
-- `.soulforge-{agent}/backups/*.bak` — Timestamped backups
-- `.soulforge-{agent}/` — Agent-specific state
+```bash
+# Every 2 hours
+openclaw cron add --name soulforce-evolve --every 120m \
+  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
+```
 
 ## Exit Codes
 

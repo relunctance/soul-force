@@ -1,22 +1,30 @@
 # SoulForce 中文文档
 
-**SoulForce** — AI 智能体记忆进化系统。让 AI 的灵魂在每次对话中进化。
+**SoulForce** — AI 智能体记忆进化系统。让你的 OpenClaw 越用越聪明。
 
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 
+> 📖 **English Documentation**: [README.md](README.md)
+
 ---
 
-## 痛点 ❌ vs 解决 ✅
+## 核心痛点 ❌
+
+**OpenClaw 不会自动更新 SOUL.md、USER.md、IDENTITY.md。**
+
+你写完就停了，AI 永远不会变聪明。
 
 | 痛点 | SoulForce 解决 |
 |------|---------------|
-| AI 的 SOUL.md 写完就停滞，永远一个样 | ✅ 自动分析记忆，发现新模式，更新 SOUL.md |
-| 每次纠正 AI，AI 下次还是犯同样的错 | ✅ 纠错自动记录，3次重复后自动进化 |
-| AI 不知道用户偏好，用着用着就忘了 | ✅ USER.md 自动同步用户偏好变化 |
-| 多 Agent 团队记忆互相污染 | ✅ 完全隔离，每个 Agent 有独立存储 |
-| 手动维护记忆文件太麻烦 | ✅ Cron 自动化，完全无感知进化 |
-| hawk-bridge 记忆用完就散，没有沉淀 | ✅ 与 hawk-bridge 共用向量库，自动提炼到文件层 |
+| ❌ SOUL.md 写完就停滞，AI 永远一个样 | ✅ 自动分析记忆，发现模式，进化 SOUL.md |
+| ❌ 纠正同一个错误 10 次，AI 还是忘 | ✅ 纠错自动记录，3 次重复后自动进化 |
+| ❌ USER.md 不追踪新偏好 | ✅ USER.md 自动同步用户偏好变化 |
+| ❌ 多 Agent 团队记忆互相污染 | ✅ 完全隔离，每个 Agent 有独立存储 |
+| ❌ 手动维护记忆文件太麻烦 | ✅ Cron 自动化，零努力，持续进化 |
+| ❌ hawk-bridge 记忆用完就散，没有沉淀 | ✅ 与 hawk-bridge 共用向量库，自动提炼到文件 |
+
+**核心价值**：这个 skill 让你的 OpenClaw 越来越聪明。每一次纠正、每一个模式、每一个偏好都被捕获并进化。
 
 ---
 
@@ -50,9 +58,7 @@
 
 ---
 
-## 效果演示
-
-### 使用前 vs 使用后
+## 使用前 vs 使用后
 
 **使用前（静态）：**
 ```
@@ -134,7 +140,7 @@ python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ### 4. 定时任务（推荐）
 
 ```bash
-# 通过 OpenClaw cron，每2小时自动进化
+# 每2小时自动进化
 openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```
@@ -173,7 +179,7 @@ python3 soulforge.py run --workspace ~/.openclaw/workspace-tseng
 # 先安装 hawk-bridge（如果还没有）
 clawhub install hawk-bridge --force
 
-# 然后 SoulForce 自动读取 hawk-bridge 的记忆
+# SoulForce 自动读取 hawk-bridge 的记忆
 python3 soulforge.py run  # 会自动检测 hawk-bridge
 ```
 
@@ -184,8 +190,8 @@ python3 soulforge.py run  # 会自动检测 hawk-bridge
 ```
 soul-force/
 ├── SKILL.md                    # OpenClaw Skill 定义
-├── README.md                   # 英文文档
-├── README.zh-CN.md            # 中文文档
+├── README.md                   # English documentation
+├── README.zh-CN.md           # 中文文档
 ├── soulforce/
 │   ├── __init__.py
 │   ├── config.py              # 配置（多 Agent 隔离）
