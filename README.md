@@ -237,7 +237,23 @@ python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ### 3. Schedule (Recommended)
 
 ```bash
-# Every 2 hours via OpenClaw cron
+# Set cron via command (every 2 hours)
+soulforge.py cron-set --every 120
+
+# Other intervals
+soulforge.py cron-set --every 60    # every hour
+soulforge.py cron-set --every 30    # every 30 minutes
+soulforge.py cron-set --every 240   # every 4 hours
+
+# View current schedule
+soulforge.py cron-set --show
+
+# Remove cron
+soulforge.py cron-set --remove
+```
+
+Or via OpenClaw CLI directly:
+```bash
 openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```

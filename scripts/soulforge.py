@@ -782,10 +782,10 @@ def cmd_changelog(args) -> int:
 def cmd_cron(args) -> int:
     """
     Show how to set up cron scheduling.
-    
+
     Args:
         args: Parsed command-line arguments
-        
+
     Returns:
         Exit code (0 = success)
     """
@@ -798,6 +798,134 @@ def cmd_cron(args) -> int:
         print(f"  openclaw cron add --name soulforce-evolve --every {args.every}m \\")
         print(f"    --message 'exec python3 {__file__} run'")
     return 0
+
+
+def cmd_cron_set(args) -> int:
+    """
+    Set or update the SoulForge cron schedule via OpenClaw.
+
+    Features:
+    - Set custom interval (in minutes)
+    - View current schedule
+    - Remove existing cron job
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 = success, 1 = error)
+    """
+    config = SoulForgeConfig(overrides={"workspace": args.workspace})
+
+    # Determine script path
+    script_path = str(Path(__file__).resolve())
+    workspace = os.path.expanduser(args.workspace)
+
+    if args.remove:
+        # Remove cron job
+        print("SoulForge Cron: Remove")
+        print("=" * 50)
+        print(f"Job name: soulforce-evolve")
+        print("")
+
+        confirm = input("Remove the SoulForge cron job? Type 'yes': ")
+        if confirm.lower() != "yes":
+            print("Cancelled.")
+            return 0
+
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["openclaw", "cron", "remove", "--name", "soulforce-evolve"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                print("✅ Cron job removed")
+                return 0
+            else:
+                print(f"❌ Failed: {result.stderr}")
+                return 1
+        except FileNotFoundError:
+            print("❌ openclaw command not found. Is OpenClaw installed?")
+            return 1
+
+    elif args.show:
+        # Show current schedule
+        print("SoulForge Cron: Current Schedule")
+        print("=" * 50)
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["openclaw", "cron", "list", "--name", "soulforce-evolve"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                print(result.stdout)
+            else:
+                print("No SoulForge cron job found.")
+                print("Use: soulforge.py cron-set --every 120")
+        except FileNotFoundError:
+            print("❌ openclaw command not found. Is OpenClaw installed?")
+            return 1
+        return 0
+
+    elif args.every is not None:
+        # Set cron schedule
+        minutes = args.every
+        print("SoulForge Cron: Set Schedule")
+        print("=" * 50)
+        print(f"Interval: every {minutes} minutes")
+        print(f"Workspace: {workspace}")
+        print(f"Script: {script_path}")
+        print("")
+
+        confirm = input("Apply this schedule? Type 'yes': ")
+        if confirm.lower() != "yes":
+            print("Cancelled.")
+            return 0
+
+        try:
+            import subprocess
+            # First try to remove existing
+            subprocess.run(
+                ["openclaw", "cron", "remove", "--name", "soulforce-evolve"],
+                capture_output=True
+            )
+            # Add new cron
+            result = subprocess.run(
+                [
+                    "openclaw", "cron", "add",
+                    "--name", "soulforce-evolve",
+                    "--every", f"{minutes}m",
+                    "--message", f"exec python3 {script_path} run --workspace {workspace}"
+                ],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                print(f"✅ Cron job set: every {minutes} minutes")
+                return 0
+            else:
+                print(f"❌ Failed: {result.stderr}")
+                return 1
+        except FileNotFoundError:
+            print("❌ openclaw command not found. Is OpenClaw installed?")
+            return 1
+
+    else:
+        # No action specified, show help
+        print("SoulForge Cron: Configuration")
+        print("=" * 50)
+        print("Usage:")
+        print(f"  soulforge.py cron-set --every 120     # Set to run every 2 hours")
+        print(f"  soulforge.py cron-set --every 60      # Set to run every hour")
+        print(f"  soulforge.py cron-set --every 30      # Set to run every 30 minutes")
+        print(f"  soulforge.py cron-set --show         # Show current schedule")
+        print(f"  soulforge.py cron-set --remove       # Remove cron job")
+        return 0
 
 
 def main() -> int:
@@ -890,6 +1018,13 @@ def main() -> int:
     cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
     cron_parser.set_defaults(func=cmd_cron)
 
+    # cron-set command - actually set cron via OpenClaw
+    cron_set_parser = subparsers.add_parser("cron-set", help="Set/update SoulForge cron schedule")
+    cron_set_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
+    cron_set_parser.add_argument("--show", action="store_true", help="Show current schedule")
+    cron_set_parser.add_argument("--remove", action="store_true", help="Remove cron job")
+    cron_set_parser.set_defaults(func=cmd_cron_set)
+
     # Parse known args to get workspace first
     known, _ = parser.parse_known_args()
     workspace = os.path.expanduser(known.workspace or "~/.openclaw/workspace")
@@ -897,7 +1032,7 @@ def main() -> int:
     # Set workspace on all subparsers
     for subparser in [run_parser, status_parser, diff_parser, stats_parser,
                       inspect_parser, restore_parser, reset_parser, template_parser,
-                      changelog_parser, cron_parser]:
+                      changelog_parser, cron_parser, cron_set_parser]:
         subparser.set_defaults(workspace=workspace)
 
     args = parser.parse_args()

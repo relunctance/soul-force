@@ -237,7 +237,23 @@ python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ### 3. 定时任务（推荐）
 
 ```bash
-# 每2小时自动进化
+# 通过命令设置定时任务（每2小时）
+soulforge.py cron-set --every 120
+
+# 其他间隔
+soulforge.py cron-set --every 60     # 每小时
+soulforge.py cron-set --every 30     # 每30分钟
+soulforge.py cron-set --every 240    # 每4小时
+
+# 查看当前定时任务
+soulforge.py cron-set --show
+
+# 删除定时任务
+soulforge.py cron-set --remove
+```
+
+或直接通过 OpenClaw CLI：
+```bash
 openclaw cron add --name soulforce-evolve --every 120m \
   --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
 ```

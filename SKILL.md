@@ -113,9 +113,12 @@ python3 soulforge.py run  # auto-detects hawk-bridge
 ## Schedule (Recommended)
 
 ```bash
-# Every 2 hours
-openclaw cron add --name soulforce-evolve --every 120m \
-  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
+# Set cron (every 2 hours)
+soulforge.py cron-set --every 120
+
+# View/remove
+soulforge.py cron-set --show
+soulforge.py cron-set --remove
 ```
 
 ## Changelog
