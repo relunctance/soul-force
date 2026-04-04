@@ -40,6 +40,111 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from soulforge import SoulForgeConfig, MemoryReader, PatternAnalyzer, SoulEvolver
 
+# Chinese help text
+_HELP_CN = """
+SoulForge - AI 智能体记忆进化系统
+========================================
+
+自动分析记忆文件，发现行为模式，进化你的 AI 身份文件。
+
+使用方式:
+    soulforge.py run [--workspace PATH] [--dry-run]
+    soulforge.py status [--workspace PATH]
+    soulforge.py diff [--workspace PATH]
+    soulforge.py stats [--workspace PATH]
+    soulforge.py inspect FILE [--workspace PATH]
+    soulforge.py restore [FILE] [--backup PATH] [--preview] [--all]
+    soulforge.py reset [--workspace PATH]
+    soulforge.py template [TEMPLATE]
+    soulforge.py changelog [--zh] [--full]
+    soulforge.py cron [--every MINUTES]
+    soulforge.py cron-set [--every N] [--show] [--remove]
+
+示例:
+    soulforge.py run                    # 运行进化
+    soulforge.py run --dry-run        # 预览模式（不写入）
+    soulforge.py status               # 查看当前状态
+    soulforge.py changelog --zh        # 查看中文更新日志
+
+---
+
+命令说明:
+
+  run
+    运行进化过程。读取 memory/ 和 .learnings/ 中的记忆，
+    调用 LLM 分析模式，将发现的模式写入 SOUL.md、USER.md 等文件。
+    --dry-run: 预览模式，只显示结果不写入文件
+
+  status
+    显示当前状态概览。包括：记忆条目数量、各源文件统计、
+    目标文件状态、备份文件数量。
+
+  diff
+    显示上次运行以来的变化。对比当前文件与最新备份的差异。
+
+  stats
+    显示进化统计。包括：SoulForge 更新次数、各文件进化次数、
+    备份文件统计。
+
+  inspect FILE
+    检查特定文件（如 SOUL.md）的进化模式。
+    显示当前内容以及发现的待应用模式。
+
+  restore [FILE] [--backup N] [--preview] [--all]
+    从备份恢复文件。
+    不带参数：列出所有可用备份
+    --backup N:  指定第 N 个备份恢复（1=最新）
+    --preview:   预览变更内容，不实际恢复
+    --all:       恢复所有有备份的文件
+
+  reset
+    重置 SoulForge 状态。删除所有备份和状态文件。
+    注意：不会修改目标文件（SOUL.md 等）。
+
+  template [NAME]
+    生成目标文件的标准模板。
+    不带参数：列出所有可用模板
+    带参数：  显示指定模板内容
+
+  changelog [--zh] [--full]
+    显示进化日志。
+    --zh:   显示中文版本（默认）
+    --full: 显示完整日志（不截断）
+
+  cron [--every MINUTES]
+    显示定时任务设置帮助。
+
+  cron-set [--every N] [--show] [--remove]
+    通过 OpenClaw 设置定时任务。
+    --every N: 设置为每 N 分钟运行一次
+    --show:    显示当前定时任务
+    --remove:  删除定时任务
+
+---
+
+全局参数:
+
+  --workspace PATH
+    指定工作区目录。默认: ~/.openclaw/workspace
+
+  --config PATH
+    指定配置文件路径。
+
+  --dry-run
+    预览模式，只显示结果不写入文件。
+
+  --log-level LEVEL
+    日志级别: DEBUG, INFO, WARNING, ERROR
+
+  --help-cn
+    显示中文帮助（就是这条）。
+
+---
+
+更多信息:
+  https://github.com/relunctance/soul-force
+"""
+
 
 def setup_logging(level: str = "INFO") -> None:
     """
@@ -937,99 +1042,79 @@ def main() -> int:
     Returns:
         Exit code from the dispatched command
     """
+    # Check for --help-cn first
+    import sys
+    if "--help-cn" in sys.argv:
+        print(_HELP_CN)
+        return 0
+
+    # Standard English help
     parser = argparse.ArgumentParser(
-        description="SoulForge - AI Agent Memory Evolution System | SoulForge - AI 智能体记忆进化系统",
+        description="SoulForge - AI Agent Memory Evolution System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
 
     # Global arguments
-    parser.add_argument(
-        "--workspace",
-        default=os.environ.get("SOULFORGE_WORKSPACE", "~/.openclaw/workspace"),
-        help="Workspace directory | 工作区目录"
-    )
-    parser.add_argument(
-        "--config",
-        help="Path to config.json | 配置文件路径"
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview changes without writing | 预览变化但不写入"
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Logging level | 日志级别"
-    )
+    parser.add_argument("--workspace", default=os.environ.get("SOULFORGE_WORKSPACE", "~/.openclaw/workspace"), help="Workspace directory")
+    parser.add_argument("--config", help="Path to config.json")
+    parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
+    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level")
+    parser.add_argument("--help-cn", action="store_true", help="Show Chinese help")
 
     # Subcommands
-    subparsers = parser.add_subparsers(dest="command", help="Commands | 命令")
+    subparsers = parser.add_subparsers(dest="command", help="Commands (use --help-cn for 中文)")
 
-    # run command - main evolution
-    run_parser = subparsers.add_parser("run", help="Run evolution process | 运行进化过程")
-    run_parser.add_argument("--dry-run", action="store_true", help="Preview only (dry run) | 仅预览（不写入）")
+    run_parser = subparsers.add_parser("run", help="Run evolution process")
+    run_parser.add_argument("--dry-run", action="store_true", help="Preview only (no writes)")
     run_parser.set_defaults(func=cmd_run)
 
-    # status command - current state
-    status_parser = subparsers.add_parser("status", help="Show current status | 显示当前状态")
+    status_parser = subparsers.add_parser("status", help="Show current memory and file status")
     status_parser.set_defaults(func=cmd_status)
 
-    # diff command - show changes
-    diff_parser = subparsers.add_parser("diff", help="Show changes since last run | 显示上次运行以来的变化")
+    diff_parser = subparsers.add_parser("diff", help="Show changes since last evolution run")
     diff_parser.set_defaults(func=cmd_diff)
 
-    # stats command - show statistics
-    stats_parser = subparsers.add_parser("stats", help="Show evolution statistics | 显示进化统计")
+    stats_parser = subparsers.add_parser("stats", help="Show evolution statistics and counts")
     stats_parser.set_defaults(func=cmd_stats)
 
-    # inspect command - check specific file
-    inspect_parser = subparsers.add_parser("inspect", help="Inspect patterns for a specific file | 检查特定文件的模式")
-    inspect_parser.add_argument("file", help="File to inspect (e.g., SOUL.md) | 要检查的文件")
+    inspect_parser = subparsers.add_parser("inspect", help="Inspect patterns for a specific file")
+    inspect_parser.add_argument("file", help="File to inspect (e.g., SOUL.md)")
     inspect_parser.set_defaults(func=cmd_inspect)
 
-    # restore command - restore from backup
-    restore_parser = subparsers.add_parser("restore", help="Restore files from backup | 从备份恢复文件")
-    restore_parser.add_argument("file", nargs="?", help="File to restore (e.g., SOUL.md) | 要恢复的文件")
-    restore_parser.add_argument("--backup", help="Backup path or index number | 备份路径或序号")
-    restore_parser.add_argument("--preview", action="store_true", help="Preview without restoring | 仅预览不恢复")
-    restore_parser.add_argument("--all", dest="restore_all", action="store_true", help="Restore all files | 恢复所有文件")
+    restore_parser = subparsers.add_parser("restore", help="Restore files from backup")
+    restore_parser.add_argument("file", nargs="?", help="File to restore (e.g., SOUL.md)")
+    restore_parser.add_argument("--backup", help="Backup path or index number")
+    restore_parser.add_argument("--preview", action="store_true", help="Preview without restoring")
+    restore_parser.add_argument("--all", dest="restore_all", action="store_true", help="Restore all files")
     restore_parser.set_defaults(func=cmd_restore)
 
-    # reset command - reset all state
-    reset_parser = subparsers.add_parser("reset", help="Reset all SoulForge state | 重置所有 SoulForge 状态")
+    reset_parser = subparsers.add_parser("reset", help="Reset all SoulForge state (NOT target files)")
     reset_parser.set_defaults(func=cmd_reset)
 
-    # template command - generate templates
-    template_parser = subparsers.add_parser("template", help="Generate file templates | 生成文件模板")
-    template_parser.add_argument("template", nargs="?", help="Specific template to show | 要显示的特定模板")
+    template_parser = subparsers.add_parser("template", help="Generate standard templates")
+    template_parser.add_argument("template", nargs="?", help="Specific template name")
     template_parser.set_defaults(func=cmd_template)
 
-    # changelog command - show evolution history
-    changelog_parser = subparsers.add_parser("changelog", help="Show evolution changelog | 显示进化日志")
-    changelog_parser.add_argument("--zh", action="store_true", help="Show Chinese version | 显示中文版本")
-    changelog_parser.add_argument("--full", action="store_true", help="Show full changelog | 显示完整日志")
+    changelog_parser = subparsers.add_parser("changelog", help="Show evolution changelog")
+    changelog_parser.add_argument("--zh", action="store_true", help="Show Chinese version")
+    changelog_parser.add_argument("--full", action="store_true", help="Show full changelog")
     changelog_parser.set_defaults(func=cmd_changelog)
 
-    # cron command - cron setup help
-    cron_parser = subparsers.add_parser("cron", help="Cron setup help | 定时任务设置帮助")
-    cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes | 每 N 分钟运行一次")
+    cron_parser = subparsers.add_parser("cron", help="Cron setup help")
+    cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
     cron_parser.set_defaults(func=cmd_cron)
 
-    # cron-set command - actually set cron via OpenClaw
-    cron_set_parser = subparsers.add_parser("cron-set", help="Set/update cron schedule | 设置/更新定时任务")
-    cron_set_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes | 每 N 分钟运行一次")
-    cron_set_parser.add_argument("--show", action="store_true", help="Show current schedule | 显示当前定时任务")
-    cron_set_parser.add_argument("--remove", action="store_true", help="Remove cron job | 删除定时任务")
+    cron_set_parser = subparsers.add_parser("cron-set", help="Set/update cron schedule via OpenClaw")
+    cron_set_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
+    cron_set_parser.add_argument("--show", action="store_true", help="Show current schedule")
+    cron_set_parser.add_argument("--remove", action="store_true", help="Remove cron job")
     cron_set_parser.set_defaults(func=cmd_cron_set)
 
     # Parse known args to get workspace first
     known, _ = parser.parse_known_args()
     workspace = os.path.expanduser(known.workspace or "~/.openclaw/workspace")
 
-    # Set workspace on all subparsers
     for subparser in [run_parser, status_parser, diff_parser, stats_parser,
                       inspect_parser, restore_parser, reset_parser, template_parser,
                       changelog_parser, cron_parser, cron_set_parser]:
@@ -1037,7 +1122,11 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Default to run if no command specified
+    # Handle --help-cn
+    if getattr(args, 'help_cn', False):
+        print(_HELP_CN)
+        return 0
+
     if not args.command:
         args.func = cmd_run
     else:
