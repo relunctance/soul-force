@@ -938,7 +938,7 @@ def main() -> int:
         Exit code from the dispatched command
     """
     parser = argparse.ArgumentParser(
-        description="SoulForge - AI Agent Memory Evolution System",
+        description="SoulForge - AI Agent Memory Evolution System | SoulForge - AI 智能体记忆进化系统",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -947,82 +947,82 @@ def main() -> int:
     parser.add_argument(
         "--workspace",
         default=os.environ.get("SOULFORGE_WORKSPACE", "~/.openclaw/workspace"),
-        help="Workspace directory (default: ~/.openclaw/workspace)"
+        help="Workspace directory | 工作区目录"
     )
     parser.add_argument(
         "--config",
-        help="Path to config.json"
+        help="Path to config.json | 配置文件路径"
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview changes without writing"
+        help="Preview changes without writing | 预览变化但不写入"
     )
     parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Logging level"
+        help="Logging level | 日志级别"
     )
 
     # Subcommands
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    subparsers = parser.add_subparsers(dest="command", help="Commands | 命令")
 
     # run command - main evolution
-    run_parser = subparsers.add_parser("run", help="Run evolution process")
-    run_parser.add_argument("--dry-run", action="store_true", help="Preview only")
+    run_parser = subparsers.add_parser("run", help="Run evolution process | 运行进化过程")
+    run_parser.add_argument("--dry-run", action="store_true", help="Preview only (dry run) | 仅预览（不写入）")
     run_parser.set_defaults(func=cmd_run)
 
     # status command - current state
-    status_parser = subparsers.add_parser("status", help="Show current status")
+    status_parser = subparsers.add_parser("status", help="Show current status | 显示当前状态")
     status_parser.set_defaults(func=cmd_status)
 
     # diff command - show changes
-    diff_parser = subparsers.add_parser("diff", help="Show changes since last run")
+    diff_parser = subparsers.add_parser("diff", help="Show changes since last run | 显示上次运行以来的变化")
     diff_parser.set_defaults(func=cmd_diff)
 
     # stats command - show statistics
-    stats_parser = subparsers.add_parser("stats", help="Show evolution statistics")
+    stats_parser = subparsers.add_parser("stats", help="Show evolution statistics | 显示进化统计")
     stats_parser.set_defaults(func=cmd_stats)
 
     # inspect command - check specific file
-    inspect_parser = subparsers.add_parser("inspect", help="Inspect patterns for a specific file")
-    inspect_parser.add_argument("file", help="File to inspect (e.g., SOUL.md)")
+    inspect_parser = subparsers.add_parser("inspect", help="Inspect patterns for a specific file | 检查特定文件的模式")
+    inspect_parser.add_argument("file", help="File to inspect (e.g., SOUL.md) | 要检查的文件")
     inspect_parser.set_defaults(func=cmd_inspect)
 
     # restore command - restore from backup
-    restore_parser = subparsers.add_parser("restore", help="Restore files from backup")
-    restore_parser.add_argument("file", nargs="?", help="File to restore (e.g., SOUL.md)")
-    restore_parser.add_argument("--backup", help="Backup path or index number")
-    restore_parser.add_argument("--preview", action="store_true", help="Preview what will change without restoring")
-    restore_parser.add_argument("--all", dest="restore_all", action="store_true", help="Restore all files")
+    restore_parser = subparsers.add_parser("restore", help="Restore files from backup | 从备份恢复文件")
+    restore_parser.add_argument("file", nargs="?", help="File to restore (e.g., SOUL.md) | 要恢复的文件")
+    restore_parser.add_argument("--backup", help="Backup path or index number | 备份路径或序号")
+    restore_parser.add_argument("--preview", action="store_true", help="Preview without restoring | 仅预览不恢复")
+    restore_parser.add_argument("--all", dest="restore_all", action="store_true", help="Restore all files | 恢复所有文件")
     restore_parser.set_defaults(func=cmd_restore)
 
     # reset command - reset all state
-    reset_parser = subparsers.add_parser("reset", help="Reset all SoulForge state")
+    reset_parser = subparsers.add_parser("reset", help="Reset all SoulForge state | 重置所有 SoulForge 状态")
     reset_parser.set_defaults(func=cmd_reset)
 
     # template command - generate templates
-    template_parser = subparsers.add_parser("template", help="Generate file templates")
-    template_parser.add_argument("template", nargs="?", help="Specific template to show")
+    template_parser = subparsers.add_parser("template", help="Generate file templates | 生成文件模板")
+    template_parser.add_argument("template", nargs="?", help="Specific template to show | 要显示的特定模板")
     template_parser.set_defaults(func=cmd_template)
 
     # changelog command - show evolution history
-    changelog_parser = subparsers.add_parser("changelog", help="Show evolution changelog")
-    changelog_parser.add_argument("--zh", action="store_true", help="Show Chinese version")
-    changelog_parser.add_argument("--full", action="store_true", help="Show full changelog")
+    changelog_parser = subparsers.add_parser("changelog", help="Show evolution changelog | 显示进化日志")
+    changelog_parser.add_argument("--zh", action="store_true", help="Show Chinese version | 显示中文版本")
+    changelog_parser.add_argument("--full", action="store_true", help="Show full changelog | 显示完整日志")
     changelog_parser.set_defaults(func=cmd_changelog)
 
     # cron command - cron setup help
-    cron_parser = subparsers.add_parser("cron", help="Cron setup help")
-    cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
+    cron_parser = subparsers.add_parser("cron", help="Cron setup help | 定时任务设置帮助")
+    cron_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes | 每 N 分钟运行一次")
     cron_parser.set_defaults(func=cmd_cron)
 
     # cron-set command - actually set cron via OpenClaw
-    cron_set_parser = subparsers.add_parser("cron-set", help="Set/update SoulForge cron schedule")
-    cron_set_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes")
-    cron_set_parser.add_argument("--show", action="store_true", help="Show current schedule")
-    cron_set_parser.add_argument("--remove", action="store_true", help="Remove cron job")
+    cron_set_parser = subparsers.add_parser("cron-set", help="Set/update cron schedule | 设置/更新定时任务")
+    cron_set_parser.add_argument("--every", type=int, metavar="MINUTES", help="Run every N minutes | 每 N 分钟运行一次")
+    cron_set_parser.add_argument("--show", action="store_true", help="Show current schedule | 显示当前定时任务")
+    cron_set_parser.add_argument("--remove", action="store_true", help="Remove cron job | 删除定时任务")
     cron_set_parser.set_defaults(func=cmd_cron_set)
 
     # Parse known args to get workspace first
