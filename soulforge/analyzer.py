@@ -20,7 +20,7 @@ Pattern structure:
 - evidence_count: How many times this pattern was observed
 
 API compatibility:
-- Supports both OpenAI-compatible and MiniMax API formats
+- Supports OpenAI-compatible LLM APIs
 - Auto-detects based on base URL configuration
 - Falls back gracefully on API errors
 """
@@ -76,7 +76,7 @@ class PatternAnalyzer:
     """
     Analyzes memory entries to discover patterns and generate updates.
 
-    Uses OpenClaw's configured LLM (MiniMax by default) to:
+    Uses OpenClaw's configured LLM to:
     1. Analyze memory entries for recurring patterns
     2. Map patterns to appropriate target files
     3. Generate update content in the correct format
@@ -168,9 +168,9 @@ Return ONLY JSON, no other text."""
         # Use OpenClaw's configured API key and endpoint
         self._api_key = config.minimax_api_key
         self._base_url = config.get("openai_base_url") or config.minimax_base_url
-        # Use OpenClaw's default model, fallback to MiniMax-M2
+        # Use OpenClaw's configured model, fallback to MiniMax-M2
         self._model = config.get("model") or "MiniMax-M2"
-        # Support both OpenAI-compatible and MiniMax API formats
+        # Support both OpenAI-compatible and MiniMax API formats (backward compat)
         self._api_format = "openai" if "/v1" in self._base_url else "minimax"
 
     def analyze(
@@ -242,7 +242,7 @@ Return ONLY JSON, no other text."""
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """
         Call the configured LLM for chat completion.
-        Supports both OpenAI-compatible and MiniMax API formats.
+        Supports OpenAI-compatible LLM APIs.
 
         Args:
             system_prompt: System prompt
@@ -270,7 +270,7 @@ Return ONLY JSON, no other text."""
                 "max_tokens": 4096,
             }
         else:
-            # MiniMax format
+            # MiniMax format (backward compat)
             url = f"{self._base_url}/text/chatcompletion_v2"
             payload = {
                 "model": self._model,
@@ -300,15 +300,15 @@ Return ONLY JSON, no other text."""
             logger.error(f"LLM API error: {e.code} - {error_body}")
             return '{"proposed_updates": [], "analysis_summary": "API error"}'
         except Exception as e:
-            logger.error(f"MiniMax API call failed: {e}")
+            logger.error(f"LLM API call failed: {e}")
             return '{"proposed_updates": [], "analysis_summary": "Request failed"}'
 
     def _parse_response(self, response_text: str) -> List[DiscoveredPattern]:
         """
-        Parse the MiniMax response and extract DiscoveredPattern objects.
+        Parse the LLM response and extract DiscoveredPattern objects.
 
         Args:
-            response_text: Raw response from MiniMax
+            response_text: Raw response from LLM
 
         Returns:
             List of DiscoveredPattern objects

@@ -62,7 +62,7 @@ exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
 ## How It Works
 
 ```
-memory/*.md + .learnings/ + hawk-bridge → MiniMax Analysis → Pattern Discovery → File Updates
+memory/*.md + .learnings/ + hawk-bridge → LLM Analysis → Pattern Discovery → File Updates
 ```
 
 **Trigger Conditions:**

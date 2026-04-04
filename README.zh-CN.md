@@ -33,7 +33,7 @@
 ### 🔄 自动进化
 - 读取 `memory/*.md` 每日记忆日志
 - 分析 `.learnings/` 纠错记录
-- 调用 **MiniMax API** 发现反复出现的模式
+- 调用 **配置的 LLM** 发现反复出现的模式
 - 自动更新 SOUL.md / USER.md / IDENTITY.md / MEMORY.md
 
 ### 🏢 多 Agent 完全隔离
@@ -87,7 +87,7 @@ SOUL.md（持续进化中）
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │  记忆源     │ ──▶ │   分析引擎    │ ──▶ │  进化器     │
-│  Memory    │     │  MiniMax API │     │  Safe Write │
+│  Memory    │     │  LLM API    │     │  Safe Write │
 └─────────────┘     └──────────────┘     └─────────────┘
      │                    │                    │
      ▼                    ▼                    ▼
@@ -116,7 +116,7 @@ clawhub install soul-force --force
 git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
 ```
 
-> ⚠️ **为什么需要 `--force`？** ClawHub 使用 VirusTotal 扫描所有插件。任何调用外部 API（如 MiniMax）的插件都会被标记为"suspicious"——这是误报。`--force` 参数用于绕过这个误报。SoulForce 只调用你已配置的 LLM API，不会做任何可疑操作。
+> ⚠️ **为什么需要 `--force`？** ClawHub 使用 VirusTotal 扫描所有插件。任何调用外部 API 的插件都会被标记为"suspicious"——这是误报。`--force` 参数用于绕过这个误报。SoulForce 只使用你在 OpenClaw 中已配置的 LLM。
 
 ### 2. 运行
 
@@ -207,7 +207,7 @@ soul-force/
 │   ├── __init__.py
 │   ├── config.py              # 配置（多 Agent 隔离）
 │   ├── memory_reader.py        # 多源记忆读取
-│   ├── analyzer.py            # MiniMax API 分析
+│   ├── analyzer.py            # LLM 模式分析
 │   └── evolver.py             # 安全文件更新
 ├── scripts/
 │   └── soulforge.py            # CLI 入口
@@ -222,7 +222,7 @@ soul-force/
 ## 环境要求
 
 - Python 3.10+
-- MiniMax API Key
+- OpenClaw（已配置 LLM）
 - OpenClaw（可选，用于 cron）
 - hawk-bridge（可选，增强向量记忆）
 

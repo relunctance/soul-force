@@ -2,7 +2,7 @@
 
 ## Overview
 
-SoulForge is a memory evolution system that continuously reads AI agent memory sources, discovers patterns using MiniMax API, and automatically updates workspace identity files.
+SoulForge is a memory evolution system that continuously reads AI agent memory sources, discovers patterns using your configured LLM, and automatically updates workspace identity files.
 
 ## System Components
 
@@ -18,7 +18,7 @@ SoulForge is a memory evolution system that continuously reads AI agent memory s
 │         │                    │                    │             │
 │         ▼                    ▼                    ▼             │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐   │
-│  │ memory/*.md │     │  MiniMax     │     │ SOUL.md       │   │
+│  │ memory/*.md │     │  LLM        │     │ SOUL.md       │   │
 │  │ .learnings/ │     │  API         │     │ USER.md       │   │
 │  │ hawk-bridge │     │              │     │ IDENTITY.md   │   │
 │  └──────────────┘     └──────────────┘     └──────────────┘   │
@@ -65,7 +65,7 @@ Returns: `List[MemoryEntry]` sorted newest-first
 
 ### soulforge.analyzer.PatternAnalyzer
 
-Uses MiniMax API to:
+Uses configured LLM to:
 1. Analyze memory entries for recurring patterns
 2. Map patterns to appropriate target files
 3. Generate update content
@@ -75,7 +75,7 @@ Uses MiniMax API to:
 ```
 SYSTEM_PROMPT + USER_PROMPT (entries + existing content)
     ↓
-MiniMax Chat Completion API
+LLM Chat Completion API
     ↓
 JSON Response Parse
     ↓
@@ -131,9 +131,9 @@ User prefers numbered lists when selecting options.
          ↓
 3. MemoryReader reads all sources → List[MemoryEntry]
          ↓
-4. PatternAnalyzer calls MiniMax API
+4. PatternAnalyzer calls LLM API
          ↓
-5. MiniMax returns JSON with proposed updates
+5. LLM returns JSON with proposed updates
          ↓
 6. PatternAnalyzer parses → List[DiscoveredPattern]
          ↓
@@ -189,11 +189,11 @@ def _read_my_source(self) -> None:
 
 ### Custom API Provider
 
-Subclass `PatternAnalyzer` and override `_call_minimax`:
+Subclass `PatternAnalyzer` and override `_call_llm`:
 
 ```python
 class CustomAnalyzer(PatternAnalyzer):
-    def _call_minimax(self, system: str, user: str) -> str:
+    def _call_llm(self, system: str, user: str) -> str:
         # Use different API
         return my_custom_llm_call(system, user)
 ```

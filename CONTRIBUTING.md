@@ -30,7 +30,7 @@ soul-evolver/
 │   ├── __init__.py
 │   ├── config.py        # Configuration management
 │   ├── memory_reader.py # Memory source reading
-│   ├── analyzer.py      # MiniMax API integration
+│   ├── analyzer.py      # LLM API integration
 │   └── evolver.py       # File update logic
 ├── scripts/
 │   └── soulforge.py     # CLI entry point

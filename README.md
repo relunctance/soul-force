@@ -33,7 +33,7 @@ You write them once. They stay the same forever. Your AI never gets smarter.
 ### 🔄 Auto Evolution
 - Reads `memory/*.md` daily logs
 - Analyzes `.learnings/` correction records
-- Uses **MiniMax API** to detect recurring patterns
+- Uses **configured LLM** to detect recurring patterns
 - Auto-updates SOUL.md / USER.md / IDENTITY.md / MEMORY.md
 
 ### 🏢 Multi-Agent Isolation
@@ -87,7 +87,7 @@ SOUL.md (auto-evolving)
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │  Memory    │ ──▶ │   Analyzer   │ ──▶ │  Evolver    │
-│  Sources   │     │  (MiniMax)   │     │  (Safe)     │
+│  Sources   │     │  (LLM)       │     │  (Safe)     │
 └─────────────┘     └──────────────┘     └─────────────┘
      │                    │                    │
      ▼                    ▼                    ▼
@@ -116,7 +116,7 @@ clawhub install soul-force --force
 git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
 ```
 
-> ⚠️ **Why `--force`?** ClawHub uses VirusTotal to scan all skills. Any skill that calls an external API (like MiniMax) is flagged as "suspicious" — this is a false positive. The `--force` flag bypasses this warning so legitimate tools can be installed. SoulForce only calls the LLM API you already configured.
+> ⚠️ **Why `--force`?** ClawHub uses VirusTotal to scan all skills. Any skill that calls an external API is flagged as "suspicious" — this is a false positive. The `--force` flag bypasses this warning. SoulForce only uses the LLM you already configured in OpenClaw.
 
 ### 2. Run
 
@@ -207,7 +207,7 @@ soul-force/
 │   ├── __init__.py
 │   ├── config.py              # Config (multi-agent isolation)
 │   ├── memory_reader.py        # Multi-source memory reading
-│   ├── analyzer.py            # MiniMax API analyzer
+│   ├── analyzer.py            # LLM-powered pattern analyzer
 │   └── evolver.py             # Safe file updates
 ├── scripts/
 │   └── soulforge.py            # CLI entry point
@@ -222,7 +222,7 @@ soul-force/
 ## Requirements
 
 - Python 3.10+
-- MiniMax API Key
+- OpenClaw with configured LLM
 - OpenClaw (optional, for cron)
 - hawk-bridge (optional, for vector memory)
 
