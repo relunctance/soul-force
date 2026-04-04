@@ -362,11 +362,17 @@ def cmd_inspect(args) -> int:
 
 def cmd_restore(args) -> int:
     """
-    Restore a file from backup.
-    
+    Restore files from backup.
+
+    Features:
+    - List all backups for a file or all files
+    - Preview what will change (diff between current and backup)
+    - Restore single file or all files
+    - Confirm before destructive action
+
     Args:
         args: Parsed command-line arguments
-        
+
     Returns:
         Exit code (0 = success, 1 = error)
     """
@@ -377,27 +383,215 @@ def cmd_restore(args) -> int:
 
     evolver = SoulEvolver(config.workspace, config)
 
-    # List available backups if no specific one given
-    if not args.backup:
-        print(f"Available backups for {args.file}:")
-        backups = evolver.get_backup_list(args.file)
+    # Handle restore all
+    if args.restore_all:
+        return _restore_all(evolver, config, args)
+
+    # Handle single file restore
+    target_file = args.file
+    if not target_file.endswith(".md"):
+        target_file += ".md"
+
+    # List available backups
+    if not args.backup and not args.preview:
+        print(f"Available backups for {target_file}:")
+        print("=" * 50)
+        backups = evolver.get_backup_list(target_file)
         if not backups:
-            print("   No backups found")
+            print("No backups found")
             return 1
-        for b in backups:
-            print(f"   - {b['path']} ({b['timestamp']})")
+        for i, b in enumerate(backups[:10]):
+            print(f"  [{i+1}] {b['path']}")
+            print(f"      {b['timestamp']}")
+        if len(backups) > 10:
+            print(f"\n  ... and {len(backups) - 10} more (use --backup INDEX to select)")
         print("")
-        print("Use: soulforge.py restore FILE --backup PATH")
+        print("Usage:")
+        print(f"  soulforge.py restore {args.file} --preview          # Preview changes")
+        print(f"  soulforge.py restore {args.file} --backup 1        # Restore backup #1")
+        print(f"  soulforge.py restore --all --preview               # Preview all")
+        print(f"  soulforge.py restore --all                        # Restore all files")
+        return 0
+
+    # Determine which backup to use
+    backup_path = args.backup
+    backups = evolver.get_backup_list(target_file)
+
+    if backup_path is not None:
+        # Allow numeric index
+        if str(backup_path).isdigit():
+            idx = int(backup_path) - 1
+            if idx < 0 or idx >= len(backups):
+                print(f"Invalid backup index: {backup_path}")
+                return 1
+            backup_path = backups[idx]["path"]
+    elif backups:
+        backup_path = backups[0]["path"]
+    else:
+        print(f"No backups found for {target_file}")
+        return 1
+
+    # Preview mode
+    if args.preview:
+        return _preview_restore(target_file, backup_path, config)
+
+    # Confirm restore
+    print(f"SoulForge Restore: {target_file}")
+    print("=" * 50)
+    print(f"Restore from: {backup_path}")
+    print("")
+    print("⚠️  This will REPLACE current content with backup content.")
+    print("")
+    print("Changes:")
+    current_path = Path(config.workspace) / target_file
+    if current_path.exists():
+        current_size = len(current_path.read_text(encoding="utf-8"))
+        backup_size = len(Path(backup_path).read_text(encoding="utf-8"))
+        print(f"  Current: {current_size} chars")
+        print(f"  Backup:  {backup_size} chars")
+        print(f"  Change: {backup_size - current_size:+d} chars")
+    else:
+        print(f"  File does not exist, will be created from backup")
+
+    print("")
+    confirm = input("Type 'yes' to confirm: ")
+    if confirm.lower() != "yes":
+        print("Cancelled.")
         return 0
 
     # Restore
-    success = evolver.restore_from_backup(args.file, args.backup)
+    success = evolver.restore_from_backup(target_file, backup_path)
     if success:
-        print(f"✅ Restored {args.file} from {args.backup}")
+        print(f"✅ Restored {target_file} from {backup_path}")
         return 0
     else:
         print(f"❌ Restore failed")
         return 1
+
+
+def _preview_restore(target_file: str, backup_path: str, config) -> int:
+    """
+    Show a preview of what will change when restoring.
+
+    Args:
+        target_file: File to restore
+        backup_path: Path to backup file
+        config: SoulForgeConfig
+
+    Returns:
+        Exit code (0 = success)
+    """
+    print(f"Preview: Restore {target_file}")
+    print("=" * 50)
+    print(f"Backup: {backup_path}")
+    print("")
+
+    current_path = Path(config.workspace) / target_file
+
+    print("Current content:")
+    print("-" * 40)
+    if current_path.exists():
+        current = current_path.read_text(encoding="utf-8")
+        print(f"  {len(current)} chars")
+        print(current[:500])
+        if len(current) > 500:
+            print("  ...(truncated)")
+    else:
+        print("  (file does not exist)")
+
+    print("")
+    print("Backup content:")
+    print("-" * 40)
+    backup = Path(backup_path).read_text(encoding="utf-8")
+    print(f"  {len(backup)} chars")
+    print(backup[:500])
+    if len(backup) > 500:
+        print("  ...(truncated)")
+
+    return 0
+
+
+def _restore_all(evolver, config, args) -> int:
+    """
+    Restore all files from their latest backups.
+
+    Args:
+        evolver: SoulEvolver instance
+        config: SoulForgeConfig
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 = success)
+    """
+    print(f"SoulForge Restore All (workspace: {config.workspace})")
+    print("=" * 50)
+
+    # Get all backups for all target files
+    all_backups = {}
+    for target in config.target_files:
+        backups = evolver.get_backup_list(target)
+        if backups:
+            all_backups[target] = backups[0]  # Latest backup
+
+    if not all_backups:
+        print("No backups found for any file")
+        return 1
+
+    print(f"Files with backups: {len(all_backups)}")
+    for target, backup_info in all_backups.items():
+        print(f"  - {target}: {backup_info['path']}")
+
+    print("")
+    print("⚠️  This will REPLACE current content of ALL listed files.")
+    print("⚠️  SoulForge evolution history will NOT be deleted (changelog preserved).")
+    print("")
+
+    if args.preview:
+        print("Preview mode - no changes will be made")
+        print("")
+        for target, backup_info in all_backups.items():
+            print(f"\n--- {target} ---")
+            current_path = Path(config.workspace) / target
+            if current_path.exists():
+                current = current_path.read_text(encoding="utf-8")
+                backup = Path(backup_info["path"]).read_text(encoding="utf-8")
+                if current == backup:
+                    print(f"  No change (identical)")
+                else:
+                    print(f"  Current: {len(current)} chars")
+                    print(f"  Backup:  {len(backup)} chars")
+                    print(f"  Change: {len(backup) - len(current):+d} chars")
+            else:
+                print(f"  File does not exist, will be created")
+        return 0
+
+    confirm = input("Type 'yes' to restore ALL files: ")
+    if confirm.lower() != "yes":
+        print("Cancelled.")
+        return 0
+
+    # Restore all files
+    restored = []
+    failed = []
+    for target, backup_info in all_backups.items():
+        success = evolver.restore_from_backup(target, backup_info["path"])
+        if success:
+            restored.append(target)
+        else:
+            failed.append(target)
+
+    print("")
+    if restored:
+        print(f"✅ Restored {len(restored)} files:")
+        for t in restored:
+            print(f"  - {t}")
+    if failed:
+        print(f"❌ Failed to restore {len(failed)} files:")
+        for t in failed:
+            print(f"  - {t}")
+        return 1
+
+    return 0
 
 
 def cmd_reset(args) -> int:
@@ -669,9 +863,11 @@ def main() -> int:
     inspect_parser.set_defaults(func=cmd_inspect)
 
     # restore command - restore from backup
-    restore_parser = subparsers.add_parser("restore", help="Restore from backup")
-    restore_parser.add_argument("file", help="File to restore (e.g., SOUL.md)")
-    restore_parser.add_argument("--backup", help="Specific backup path to restore from")
+    restore_parser = subparsers.add_parser("restore", help="Restore files from backup")
+    restore_parser.add_argument("file", nargs="?", help="File to restore (e.g., SOUL.md)")
+    restore_parser.add_argument("--backup", help="Backup path or index number")
+    restore_parser.add_argument("--preview", action="store_true", help="Preview what will change without restoring")
+    restore_parser.add_argument("--all", dest="restore_all", action="store_true", help="Restore all files")
     restore_parser.set_defaults(func=cmd_restore)
 
     # reset command - reset all state
