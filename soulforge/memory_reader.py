@@ -22,13 +22,17 @@ import json
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 # Rough token estimation: ~4 chars per token for mixed Chinese/English
 CHARS_PER_TOKEN = 4
+
+# Default values for parsing learnings files
+DEFAULT_TOKEN_PATTERNS = ["**Time**:", "Time:"]
+SECTION_SEPARATOR = "\n---\n"
 
 
 def _get_tokenizer(encoding_name: str = "cl100k_base"):
@@ -259,134 +263,102 @@ class MemoryReader:
             logger.debug(f"Learnings directory not found: {learnings_dir}")
             return entries
 
-        for fname, parser in [
-            ("LEARNINGS.md", self._parse_learnings_md),
-            ("ERRORS.md", self._parse_errors_md),
-            ("FEATURE_REQUESTS.md", self._parse_feature_requests_md),
-        ]:
+        # Define the learnings files to parse with their specific configs
+        learnings_files = [
+            ("LEARNINGS.md", "learning", self._categorize_learnings_section, 0.6),
+            ("ERRORS.md", "error", lambda _: "error", 0.9),
+            ("FEATURE_REQUESTS.md", "feature_request", lambda _: "feature_request", 0.5),
+        ]
+
+        for fname, source_type, category_fn, default_importance in learnings_files:
             fpath = learnings_dir / fname
             if fpath.exists():
-                entries.extend(parser(fpath, since))
+                entries.extend(self._parse_learnings_file(fpath, since, source_type, category_fn, default_importance))
 
         return entries
 
-    def _parse_learnings_md(self, file_path: Path, since: Optional[str] = None) -> List[MemoryEntry]:
-        """Parse LEARNINGS.md format."""
+    def _parse_learnings_file(
+        self,
+        file_path: Path,
+        since: Optional[str],
+        source_type: str,
+        category_fn: Callable[[str], str],
+        default_importance: float
+    ) -> List[MemoryEntry]:
+        """
+        Parse a learnings-style markdown file (LEARNINGS.md, ERRORS.md, FEATURE_REQUESTS.md).
+
+        Args:
+            file_path: Path to the file to parse
+            since: Only return entries newer than this timestamp
+            source_type: The source_type for MemoryEntry (e.g., "learning", "error")
+            category_fn: Function to determine category from section content
+            default_importance: Default importance value for entries
+
+        Returns:
+            List of MemoryEntry objects
+        """
         entries = []
         try:
             content = file_path.read_text(encoding="utf-8")
-            sections = content.split("\n---\n")
+            sections = content.split(SECTION_SEPARATOR)
             for section in sections:
                 if not section.strip() or section.startswith("#"):
                     continue
-                section_timestamp = None
-                for line in section.split("\n"):
-                    if "**Time**:" in line or "Time:" in line:
-                        ts_part = line.split("**Time**:")[-1].split("Time:")[-1].strip()
-                        section_timestamp = ts_part[:10] if ts_part else None
-                        break
 
+                # Extract timestamp from section
+                section_timestamp = self._extract_timestamp_from_section(section)
+
+                # Skip if older than since timestamp
                 if since and section_timestamp and section_timestamp <= since[:10]:
                     continue
 
-                lines = section.strip().split("\n")
-                category = "insight"
-                for line in lines:
-                    if line.startswith("## "):
-                        header = line[3:].lower()
-                        if "correction" in header:
-                            category = "correction"
-                        elif "knowledge_gap" in header:
-                            category = "knowledge_gap"
-                        elif "best_practice" in header:
-                            category = "best_practice"
-                        break
-
+                # Extract text content
                 text_content = self._extract_text_content(section)
-                if text_content.strip():
-                    entry = MemoryEntry(
-                        source=str(file_path.relative_to(self.workspace)),
-                        source_type="learning",
-                        category=category,
-                        content=text_content,
-                        timestamp=section_timestamp,
-                        importance=0.8 if category == "correction" else 0.6,
-                        metadata={}
-                    )
-                    entries.append(entry)
+                if not text_content.strip():
+                    continue
+
+                # Determine category and importance
+                category = category_fn(section)
+                importance = 0.8 if category == "correction" else default_importance
+
+                entry = MemoryEntry(
+                    source=str(file_path.relative_to(self.workspace)),
+                    source_type=source_type,
+                    category=category,
+                    content=text_content,
+                    timestamp=section_timestamp,
+                    importance=importance,
+                    metadata={}
+                )
+                entries.append(entry)
         except Exception as e:
             logger.warning(f"Failed to parse {file_path}: {e}")
         return entries
 
-    def _parse_errors_md(self, file_path: Path, since: Optional[str] = None) -> List[MemoryEntry]:
-        """Parse ERRORS.md format."""
-        entries = []
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            sections = content.split("\n---\n")
-            for section in sections:
-                if not section.strip() or section.startswith("#"):
-                    continue
-                section_timestamp = None
-                for line in section.split("\n"):
-                    if "**Time**:" in line or "Time:" in line:
-                        ts_part = line.split("**Time**:")[-1].split("Time:")[-1].strip()
-                        section_timestamp = ts_part[:10] if ts_part else None
-                        break
+    def _extract_timestamp_from_section(self, section: str) -> Optional[str]:
+        """Extract timestamp from a section's lines."""
+        for line in section.split("\n"):
+            for pattern in DEFAULT_TOKEN_PATTERNS:
+                if pattern in line:
+                    ts_part = line.split(pattern)[-1].strip()
+                    return ts_part[:10] if ts_part else None
+        return None
 
-                if since and section_timestamp and section_timestamp <= since[:10]:
-                    continue
-
-                text_content = self._extract_text_content(section)
-                if text_content.strip():
-                    entry = MemoryEntry(
-                        source=str(file_path.relative_to(self.workspace)),
-                        source_type="error",
-                        category="error",
-                        content=text_content,
-                        timestamp=section_timestamp,
-                        importance=0.9,
-                        metadata={}
-                    )
-                    entries.append(entry)
-        except Exception as e:
-            logger.warning(f"Failed to parse {file_path}: {e}")
-        return entries
-
-    def _parse_feature_requests_md(self, file_path: Path, since: Optional[str] = None) -> List[MemoryEntry]:
-        """Parse FEATURE_REQUESTS.md format."""
-        entries = []
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            sections = content.split("\n---\n")
-            for section in sections:
-                if not section.strip() or section.startswith("#"):
-                    continue
-                section_timestamp = None
-                for line in section.split("\n"):
-                    if "**Time**:" in line or "Time:" in line:
-                        ts_part = line.split("**Time**:")[-1].split("Time:")[-1].strip()
-                        section_timestamp = ts_part[:10] if ts_part else None
-                        break
-
-                if since and section_timestamp and section_timestamp <= since[:10]:
-                    continue
-
-                text_content = self._extract_text_content(section)
-                if text_content.strip():
-                    entry = MemoryEntry(
-                        source=str(file_path.relative_to(self.workspace)),
-                        source_type="feature_request",
-                        category="feature_request",
-                        content=text_content,
-                        timestamp=section_timestamp,
-                        importance=0.5,
-                        metadata={}
-                    )
-                    entries.append(entry)
-        except Exception as e:
-            logger.warning(f"Failed to parse {file_path}: {e}")
-        return entries
+    def _categorize_learnings_section(self, section: str) -> str:
+        """Determine category from LEARNINGS.md section content."""
+        lines = section.strip().split("\n")
+        for line in lines:
+            if line.startswith("## "):
+                header = line[3:].lower()
+                if "correction" in header:
+                    return "correction"
+                elif "knowledge_gap" in header:
+                    return "knowledge_gap"
+                elif "best_practice" in header:
+                    return "best_practice"
+                break
+        return "insight"
 
     def _read_hawk_bridge(self) -> None:
         """
