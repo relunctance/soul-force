@@ -1,0 +1,200 @@
+{
+  "/home/gql/.openclaw/workspace/skills/soul-force": [
+    {
+      "PRODUCT": [
+        {
+          "description": "README 声称自动分析 `.learnings/` 目录中的纠正记录来实现自动进化，但整个代码库中找不到 `.learnings/` 目录的处理逻辑。这是一个核心功能缺失。",
+          "category": "partial_solution",
+          "impact_score": 0.9,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628306"
+        },
+        {
+          "description": "README 声称支持 \"Cron automation — zero effort, continuous evolution\"，但代码库中完全没有 cron/scheduler 相关实现，只有手动执行的 CLI",
+          "category": "missing_feature",
+          "impact_score": 0.8,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628317"
+        },
+        {
+          "description": "README 声称 \"Incremental sync — only fetches entries newer than last run\" 用于 hawk-bridge 集成，但代码中没有实现增量同步逻辑，每次都是全量拉取",
+          "category": "partial_solution",
+          "impact_score": 0.7,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628319"
+        },
+        {
+          "description": "README 中使用示例声称是真实运行结果，但示例中 `# 内容` 被截断（显示为 `# `），看起来像是占位符或未完成的文本",
+          "category": "wrong_approach",
+          "impact_score": 0.4,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628320"
+        },
+        {
+          "description": "README 列出的 \"Confidence Levels\" 功能（>0.8 自动应用，0.5-0.8 审核，<0.5 忽略）在 SKILL.md 中也被提及，但在核心代码中找不到 confidence score 的计算和应用逻辑",
+          "category": "partial_solution",
+          "impact_score": 0.6,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628321"
+        },
+        {
+          "description": "README 声称 \"Schema validation: Pydantic validation with 1-retry on LLM output errors\"，但项目中没有 Pydantic 模型定义，验证逻辑完全缺失",
+          "category": "partial_solution",
+          "impact_score": 0.5,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628322"
+        },
+        {
+          "description": "README 提到 \"Token budget: Configurable max tokens per run (default 4096)\" 但代码中没有 token 预算控制的实现",
+          "category": "partial_solution",
+          "impact_score": 0.5,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628323"
+        }
+      ],
+      "TECH": [
+        {
+          "description": "Duplicate string pattern detected (3 occurrences)",
+          "category": "duplicate_code",
+          "impact_score": 0.3,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628324"
+        },
+        {
+          "description": "Function 'cmd_run' is 148 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628326"
+        },
+        {
+          "description": "Function 'cmd_review' is 131 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628327"
+        },
+        {
+          "description": "Function '_cmd_review_interactive' is 125 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628328"
+        },
+        {
+          "description": "Function 'main' is 154 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628328"
+        },
+        {
+          "description": "Duplicate string pattern detected (18 occurrences)",
+          "category": "duplicate_code",
+          "impact_score": 0.3,
+          "file_path": "tests/test_soulforge.py",
+          "timestamp": "2026-04-06T01:49:13.628329"
+        },
+        {
+          "description": "5 modules lack test coverage: soulforge/analyzer, soulforge/config, soulforge/evolver, soulforge/memory_reader, soulforge/schema",
+          "category": "missing_test",
+          "impact_score": 0.5,
+          "file_path": ".",
+          "timestamp": "2026-04-06T01:49:13.628330"
+        }
+      ],
+      "PROJECT": [
+        {
+          "description": "项目巡检从未执行，巡检迭代次数为0，意味着没有任何正式的、系统的项目健康检查机制",
+          "category": "scan_rhythm",
+          "impact_score": 0.9,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628331"
+        },
+        {
+          "description": "learnings记录不完整，拒绝场景描述缺失，导致无法从失败中有效学习",
+          "category": "learnings_gap",
+          "impact_score": 0.7,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628332"
+        },
+        {
+          "description": "未看到任何依赖健康检查和Git规范检查的记录，项目可能存在潜在的安全和维护风险",
+          "category": "dependency_issue",
+          "impact_score": 0.6,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:49:13.628333"
+        }
+      ]
+    },
+    {
+      "TECH": [
+        {
+          "description": "Duplicate string pattern detected (3 occurrences)",
+          "category": "duplicate_code",
+          "impact_score": 0.3,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576150"
+        },
+        {
+          "description": "Function 'cmd_run' is 148 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576162"
+        },
+        {
+          "description": "Function 'cmd_review' is 131 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576164"
+        },
+        {
+          "description": "Function '_cmd_review_interactive' is 125 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576165"
+        },
+        {
+          "description": "Function 'main' is 154 lines (>100)",
+          "category": "long_function",
+          "impact_score": 0.5,
+          "file_path": "scripts/soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576166"
+        },
+        {
+          "description": "Duplicate string pattern detected (18 occurrences)",
+          "category": "duplicate_code",
+          "impact_score": 0.3,
+          "file_path": "tests/test_soulforge.py",
+          "timestamp": "2026-04-06T01:44:37.576167"
+        },
+        {
+          "description": "5 modules lack test coverage: soulforge/analyzer, soulforge/config, soulforge/evolver, soulforge/memory_reader, soulforge/schema",
+          "category": "missing_test",
+          "impact_score": 0.5,
+          "file_path": ".",
+          "timestamp": "2026-04-06T01:44:37.576168"
+        }
+      ],
+      "PROJECT": [
+        {
+          "description": "项目巡检迭代次数为 0，说明项目没有建立定期巡检机制，处于'想起来才扫一次'的随意状态",
+          "category": "scan_rhythm",
+          "impact_score": 0.85,
+          "file_path": "",
+          "timestamp": "2026-04-06T01:44:37.576170"
+        },
+        {
+          "description": "Learnings 记录不完整，拒绝场景未记录，无法有效追踪问题根因和形成闭环",
+          "category": "learnings_gap",
+          "impact_score": 0.7,
+          "file_path": "learnings历史",
+          "timestamp": "2026-04-06T01:44:37.576171"
+        }
+      ]
+    }
+  ]
+}
