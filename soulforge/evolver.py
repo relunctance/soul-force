@@ -3,39 +3,16 @@ SoulForge SoulEvolver
 
 Safely evolves workspace files by applying discovered patterns.
 
-Safety features:
-1. Incremental updates: Appends update blocks, never overwrites existing content
-2. Backup before write: Every modification creates a timestamped backup
-3. Duplicate detection: Skips patterns already present in the target file
-4. Dry-run mode: Preview changes without writing
-5. Per-agent isolation: Each agent has its own backup/state directories
-
-Update block format:
-    <!-- SoulForge Update | 2026-04-05T12:00:00+08:00 -->
-    ## Pattern Summary
-
-    **Source**: memory/2026-04-05.md
-    **Pattern Type**: behavior
-    **Confidence**: High (observed 4 times)
-
-    **Content**:
-    Pattern content here.
-
-    <!-- /SoulForge Update -->
-
-Multi-agent isolation:
-    - main workspace:      .soulforge-main/backups/
-    - wukong workspace:    .soulforge-wukong/backups/
-    - tseng workspace:     .soulforge-tseng/backups/
-
-Backup management:
-    - Keeps last 10 backups per file
-    - Timestamped with ISO format: FILENAME.YYYYMMDD_HHMMSS.bak
-    - Old backups auto-cleaned on each write
+Features:
+1. Rollback automation: apply_with_rollback() validates writes and auto-restores on failure
+2. Pattern expiry: clean_expired() removes/marks stale expired blocks
+3. Notification: deliver_result() sends Feishu notifications on completion
+4. All original safety features (incremental, smart insertion, backup, dry-run)
 """
 
 import os
 import re
+import json
 import logging
 import shutil
 from pathlib import Path
@@ -50,30 +27,19 @@ logger = logging.getLogger(__name__)
 class SoulEvolver:
     """
     Safely evolves workspace files by applying discovered patterns.
-
-    Safety features:
-    - Incremental updates (appends, never overwrites)
-    - Backup before write
-    - Provenance tracking
-    - Dry-run mode
     """
 
     def __init__(self, workspace: str, config):
-        """
-        Initialize the evolver.
-
-        Args:
-            workspace: Path to workspace directory
-            config: SoulForgeConfig instance
-        """
         self.workspace = Path(workspace)
         self.config = config
         self._changes_made: List[Dict] = []
+        self._review_output: List[Dict] = []
 
     def apply_updates(
         self,
         patterns: List[DiscoveredPattern],
-        dry_run: Optional[bool] = None
+        dry_run: Optional[bool] = None,
+        backup_type: str = "auto"
     ) -> Dict[str, Any]:
         """
         Apply discovered patterns to target files.
@@ -81,6 +47,7 @@ class SoulEvolver:
         Args:
             patterns: List of DiscoveredPattern objects to apply
             dry_run: If True, don't actually write (default from config)
+            backup_type: "auto" or "manual" for backup naming
 
         Returns:
             Dict with results summary
@@ -96,9 +63,10 @@ class SoulEvolver:
             "patterns_skipped": 0,
             "errors": [],
             "files_updated": [],
+            "backup_type": backup_type,
+            "rollbacks": 0,
         }
 
-        # Group patterns by target file
         by_file: Dict[str, List[DiscoveredPattern]] = {}
         for pattern in patterns:
             target = pattern.target_file
@@ -106,14 +74,17 @@ class SoulEvolver:
                 by_file[target] = []
             by_file[target].append(pattern)
 
-        # Process each target file
         for filename, file_patterns in by_file.items():
             try:
-                result = self._apply_to_file(filename, file_patterns, dry_run)
+                # Use rollback-enabled apply
+                result = self._apply_to_file_with_rollback(
+                    filename, file_patterns, dry_run, backup_type
+                )
                 if result["applied"] > 0:
                     results["files_updated"].append(filename)
                     results["patterns_applied"] += result["applied"]
                 results["patterns_skipped"] += result["skipped"]
+                results["rollbacks"] += result.get("rollbacks", 0)
                 if result.get("error"):
                     results["errors"].append({filename: result["error"]})
             except Exception as e:
@@ -122,29 +93,410 @@ class SoulEvolver:
 
         results["changes"] = self._changes_made
 
-        # Write changelog (only if not dry-run and changes were made)
         if not dry_run and results["patterns_applied"] > 0:
             self._write_changelog(results)
+            self.config.set_last_run_timestamp()
+
+        return results
+
+    def _apply_to_file_with_rollback(
+        self,
+        filename: str,
+        patterns: List[DiscoveredPattern],
+        dry_run: bool,
+        backup_type: str = "auto"
+    ) -> Dict[str, Any]:
+        """
+        Apply patterns to a single file with automatic rollback on validation failure.
+
+        Args:
+            filename: Target file name (relative to workspace)
+            patterns: Patterns to apply
+            dry_run: Whether to actually write
+            backup_type: "auto" or "manual"
+
+        Returns:
+            Dict with applied/skipped counts, rollback count, and any error
+        """
+        file_path = self.workspace / filename
+        result = {"applied": 0, "skipped": 0, "error": None, "rollbacks": 0}
+
+        # Load existing content
+        if file_path.exists():
+            existing_content = file_path.read_text(encoding="utf-8")
+        else:
+            existing_content = ""
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"File doesn't exist, will create: {filename}")
+
+        patterns_to_apply = self._filter_duplicates(patterns, existing_content)
+        if not patterns_to_apply:
+            result["skipped"] = len(patterns)
+            logger.info(f"All patterns already exist in {filename}, skipping")
+            return result
+
+        # Create backup BEFORE writing
+        if not dry_run and self.config.get("backup_enabled", True):
+            self._create_backup(file_path, backup_type)
+
+        if dry_run:
+            for pattern in patterns_to_apply:
+                logger.info(f"[DRY RUN] Would add to {filename}: {pattern.summary} "
+                            f"(at {pattern.insertion_point})")
+                result["applied"] += 1
+                self._changes_made.append({
+                    "file": filename,
+                    "action": "would_add",
+                    "pattern": pattern.summary,
+                    "insertion_point": pattern.insertion_point,
+                })
+            return result
+
+        # Actually apply each pattern with rollback protection
+        for pattern in patterns_to_apply:
+            update_block = pattern.to_markdown_block()
+            snapshot = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
+
+            try:
+                self._insert_content(file_path, pattern.insertion_point, update_block)
+
+                # Validate write
+                if not self._validate_write(file_path, pattern, update_block):
+                    logger.warning(f"Validation failed for {filename}, rolling back...")
+                    file_path.write_text(snapshot, encoding="utf-8")
+                    result["rollbacks"] += 1
+                    result["error"] = f"Rollback: validation failed for pattern '{pattern.summary}'"
+                    continue
+
+                logger.info(f"Updated {filename}: {pattern.summary} (via {pattern.insertion_point})")
+                result["applied"] += 1
+                self._changes_made.append({
+                    "file": filename,
+                    "action": "added",
+                    "pattern": pattern.summary,
+                    "insertion_point": pattern.insertion_point,
+                })
+            except Exception as e:
+                # Rollback on exception
+                if snapshot:
+                    file_path.write_text(snapshot, encoding="utf-8")
+                    result["rollbacks"] += 1
+                    logger.error(f"Write failed for {filename}, rolled back: {e}")
+                result["error"] = str(e)
+
+        return result
+
+    def _validate_write(self, file_path: Path, pattern: DiscoveredPattern, block: str) -> bool:
+        """
+        Validate that a write was successful.
+
+        Checks:
+        1. File is readable
+        2. New block exists in file
+        3. Content is intact (block text present)
+
+        Args:
+            file_path: Path to the written file
+            pattern: The pattern that was applied
+            block: The block that was inserted
+
+        Returns:
+            True if validation passes, False otherwise
+        """
+        try:
+            if not file_path.exists():
+                logger.warning(f"Validation failed: file does not exist: {file_path}")
+                return False
+
+            content = file_path.read_text(encoding="utf-8")
+
+            # Check that the block is present
+            if block.strip() not in content.strip():
+                logger.warning(f"Validation failed: block content not found in {file_path}")
+                return False
+
+            # Check that SoulForge markers are present
+            if "<!-- SoulForge Update" not in content:
+                logger.warning(f"Validation failed: SoulForge marker missing in {file_path}")
+                return False
+
+            return True
+        except Exception as e:
+            logger.warning(f"Validation error: {e}")
+            return False
+
+    def apply_with_rollback(
+        self,
+        patterns: List[DiscoveredPattern],
+        dry_run: Optional[bool] = None,
+        backup_type: str = "auto"
+    ) -> Dict[str, Any]:
+        """
+        Alias for apply_updates with explicit rollback naming.
+
+        Kept for backward compatibility and CLI --rollback-auto command.
+        """
+        return self.apply_updates(patterns, dry_run=dry_run, backup_type=backup_type)
+
+    def clean_expired(self, dry_run: bool = True) -> Dict[str, Any]:
+        """
+        Remove or mark stale SoulForge update blocks that have expired.
+
+        Scans target files for update blocks with **Expires** field,
+        removes those past their expiry date.
+
+        Args:
+            dry_run: If True, only report what would be removed
+
+        Returns:
+            Dict with results summary
+        """
+        from datetime import datetime
+        results = {
+            "dry_run": dry_run,
+            "files_scanned": 0,
+            "blocks_removed": 0,
+            "blocks_marked_stale": 0,
+            "files_modified": [],
+            "errors": [],
+        }
+
+        now = datetime.now()
+
+        for target in self.config.target_files:
+            target_path = self.workspace / target
+            if not target_path.exists():
+                continue
+
+            results["files_scanned"] += 1
+
+            try:
+                content = target_path.read_text(encoding="utf-8")
+                original = content
+
+                # Find all SoulForge update blocks
+                # Pattern: <!-- SoulForge Update | TIMESTAMP --> ... <!-- /SoulForge Update -->
+                block_pattern = re.compile(
+                    r"(<!-- SoulForge Update \| [^\n]+\n.*?<!-- /SoulForge Update -->\n?)",
+                    re.DOTALL
+                )
+
+                new_blocks = []
+                removed_count = 0
+                marked_count = 0
+
+                for match in block_pattern.finditer(content):
+                    block = match.group(0)
+
+                    # Extract **Expires** date if present
+                    expires_match = re.search(r"\*\*Expires\*\*:\s*(\d{4}-\d{2}-\d{2})", block)
+                    if not expires_match:
+                        new_blocks.append(block)
+                        continue
+
+                    expires_str = expires_match.group(1)
+                    try:
+                        exp_date = datetime.strptime(expires_str, "%Y-%m-%d")
+                        if exp_date < now:
+                            # Expired — remove block
+                            removed_count += 1
+                            if not dry_run:
+                                logger.info(f"Removing expired block from {target}: {expires_str}")
+                        else:
+                            # Not yet expired — keep but mark as stale if close
+                            days_until = (exp_date - now).days
+                            if days_until <= 7 and not dry_run:
+                                # Add stale marker
+                                block = block.replace(
+                                    f"**Expires**: {expires_str}",
+                                    f"**Expires**: {expires_str} ⚠️ STALE"
+                                )
+                                marked_count += 1
+                            new_blocks.append(block)
+                    except ValueError:
+                        new_blocks.append(block)
+                        continue
+
+                if removed_count > 0 or marked_count > 0:
+                    if not dry_run:
+                        new_content = "".join(new_blocks)
+                        target_path.write_text(new_content, encoding="utf-8")
+                        results["files_modified"].append(target)
+
+                    results["blocks_removed"] += removed_count
+                    results["blocks_marked_stale"] += marked_count
+                    logger.info(f"{target}: removed {removed_count} expired blocks, "
+                                f"marked {marked_count} as stale")
+
+            except Exception as e:
+                logger.error(f"Failed to clean {target}: {e}")
+                results["errors"].append({target: str(e)})
+
+        return results
+
+    def deliver_result(self, results: Dict[str, Any]) -> bool:
+        """
+        Deliver evolution result notification via Feishu.
+
+        Args:
+            results: Results dict from apply_updates()
+
+        Returns:
+            True if notification was sent or skipped, False on error
+        """
+        if not self.config.notify_on_complete:
+            logger.debug("Notifications disabled, skipping")
+            return True
+
+        try:
+            import subprocess
+            from pathlib import Path
+
+            # Build notification text
+            files = results.get("files_updated", [])
+            patterns = results.get("patterns_applied", 0)
+            errors = results.get("errors", [])
+            rollbacks = results.get("rollbacks", 0)
+            dry_run = results.get("dry_run", False)
+
+            if dry_run:
+                summary = f"🔍 SoulForge DRY RUN — {patterns} patterns would be applied"
+            else:
+                summary = f"✅ SoulForge Evolution — {patterns} patterns applied to {len(files)} files"
+
+            details = []
+            if files:
+                details.append(f"Files: {', '.join(files)}")
+            if rollbacks > 0:
+                details.append(f"⚠️ Rollbacks: {rollbacks}")
+            if errors:
+                err_files = [list(e.keys())[0] for e in errors]
+                details.append(f"❌ Errors: {', '.join(err_files)}")
+
+            message = summary
+            if details:
+                message += "\n" + "\n".join(details)
+
+            # Try to send via openclaw message tool
+            chat_id = self.config.notify_chat_id
+            if chat_id:
+                script = f"""
+import subprocess
+result = subprocess.run(
+    ["openclaw", "message", "--chat", "{chat_id}", "--text", {json.dumps(message)}],
+    capture_output=True,
+    text=True,
+    timeout=10
+)
+print(result.returncode)
+"""
+                try:
+                    subprocess.run(["python3", "-c", script], timeout=15, capture_output=True)
+                    logger.info("Feishu notification sent")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Failed to send Feishu notification: {e}")
+
+            # Fallback: write to notification file
+            notify_path = Path(self.config.state_dir) / "last_notification.txt"
+            notify_path.parent.mkdir(parents=True, exist_ok=True)
+            notify_path.write_text(message, encoding="utf-8")
+            logger.info(f"Notification saved to {notify_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to deliver result notification: {e}")
+            return False
+
+    def generate_review(
+        self,
+        patterns: List[DiscoveredPattern]
+    ) -> Dict[str, Any]:
+        """Generate review output for patterns without writing files."""
+        self._review_output = []
+
+        high_conf = [p for p in patterns if p.auto_apply and p.confidence > 0.8]
+        medium_conf = [p for p in patterns if p.needs_review]
+        low_conf = [p for p in patterns if not p.auto_apply and not p.needs_review]
+
+        for p in patterns:
+            self._review_output.append(p.to_dict())
+
+        review_data = {
+            "timestamp": datetime.now().isoformat(),
+            "total_patterns": len(patterns),
+            "high_confidence": len(high_conf),
+            "medium_confidence": len(medium_conf),
+            "low_confidence": len(low_conf),
+            "patterns": self._review_output,
+            "workspace": str(self.workspace),
+        }
+
+        review_path = Path(self.config.review_dir)
+        review_path.mkdir(parents=True, exist_ok=True)
+        latest_path = review_path / "latest.json"
+        latest_path.write_text(json.dumps(review_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        logger.info(f"Review output saved to {latest_path}")
+
+        return {
+            "total_patterns": len(patterns),
+            "high_confidence": high_conf,
+            "medium_confidence": medium_conf,
+            "low_confidence": low_conf,
+            "review_file": str(latest_path),
+            "patterns": patterns,
+        }
+
+    def apply_from_review(self, confirm: bool = False) -> Dict[str, Any]:
+        """Apply patterns from the latest review output."""
+        review_path = Path(self.config.review_dir) / "latest.json"
+        if not review_path.exists():
+            logger.error(f"No review file found at {review_path}")
+            return {"error": "No review file found. Run 'soulforge.py review' first."}
+
+        try:
+            review_data = json.loads(review_path.read_text(encoding="utf-8"))
+            patterns = [DiscoveredPattern.from_dict(p) for p in review_data.get("patterns", [])]
+        except Exception as e:
+            logger.error(f"Failed to load review file: {e}")
+            return {"error": f"Failed to load review file: {e}"}
+
+        if not confirm:
+            return {
+                "dry_run": True,
+                "total_patterns": len(patterns),
+                "patterns": [p.to_dict() for p in patterns],
+                "message": "Run with --confirm to apply these patterns",
+            }
+
+        return self.apply_updates(patterns, dry_run=False, backup_type="auto")
+
+    def create_manual_backup(self) -> Dict[str, Any]:
+        """Create a manual snapshot of all target files."""
+        results = {"backed_up": [], "skipped": [], "errors": []}
+
+        for target in self.config.target_files:
+            target_path = self.workspace / target
+            if target_path.exists():
+                try:
+                    self._create_backup(target_path, backup_type="manual")
+                    results["backed_up"].append(target)
+                except Exception as e:
+                    results["errors"].append({target: str(e)})
+            else:
+                results["skipped"].append(target)
 
         return results
 
     def _write_changelog(self, results: Dict[str, Any]) -> None:
-        """
-        Write a changelog entry for this evolution run.
-        
-        Creates or appends to CHANGELOG.md and CHANGELOG.zh-CN.md in the
-        agent's state directory.
-        
-        Args:
-            results: Results dict from apply_updates()
-        """
+        """Write a changelog entry for this evolution run."""
         state_dir = Path(self.config.state_dir)
         state_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
         patterns = results.get("changes", [])
 
-        # Build English changelog entry
         en_entry = f"""## {timestamp}
 
 ### Files Updated: {len(results.get("files_updated", []))}
@@ -163,7 +515,6 @@ class SoulEvolver:
 
         en_entry += "---\n\n"
 
-        # Build Chinese changelog entry
         zh_entry = f"""## {timestamp}
 
 ### 更新的文件：{len(results.get("files_updated", []))}
@@ -182,11 +533,9 @@ class SoulEvolver:
 
         zh_entry += "---\n\n"
 
-        # Write English changelog
         en_path = state_dir / "CHANGELOG.md"
         if en_path.exists():
             existing = en_path.read_text(encoding="utf-8")
-            # Find the last "---" separator and insert after it
             parts = existing.split("---\n\n", 1)
             if len(parts) > 1:
                 new_content = parts[0] + "---\n\n" + en_entry + parts[1]
@@ -194,11 +543,8 @@ class SoulEvolver:
                 new_content = en_entry + existing
         else:
             new_content = "# SoulForge Changelog\n\n" + en_entry
-
         en_path.write_text(new_content, encoding="utf-8")
-        logger.info(f"Changelog updated: {en_path}")
 
-        # Write Chinese changelog
         zh_path = state_dir / "CHANGELOG.zh-CN.md"
         if zh_path.exists():
             existing = zh_path.read_text(encoding="utf-8")
@@ -209,108 +555,77 @@ class SoulEvolver:
                 new_content = zh_entry + existing
         else:
             new_content = "# SoulForge 更新日志\n\n" + zh_entry
-
         zh_path.write_text(new_content, encoding="utf-8")
-        logger.info(f"Changelog updated: {zh_path}")
+        logger.info(f"Changelog updated: {en_path}")
 
     def _apply_to_file(
         self,
         filename: str,
         patterns: List[DiscoveredPattern],
-        dry_run: bool
+        dry_run: bool,
+        backup_type: str = "auto"
     ) -> Dict[str, Any]:
-        """
-        Apply patterns to a single file.
+        """Apply patterns to a single file (delegates to rollback version)."""
+        return self._apply_to_file_with_rollback(filename, patterns, dry_run, backup_type)
 
-        Args:
-            filename: Target file name (relative to workspace)
-            patterns: Patterns to apply
-            dry_run: Whether to actually write
+    def _insert_content(self, file_path: Path, insertion_point: str, block: str) -> None:
+        """Insert content based on insertion_point."""
+        if insertion_point == "append" or not insertion_point:
+            with open(file_path, "a", encoding="utf-8") as f:
+                f.write("\n" + block)
+            return
 
-        Returns:
-            Dict with applied/skipped counts and any error
-        """
-        file_path = self.workspace / filename
-        result = {"applied": 0, "skipped": 0, "error": None}
+        if insertion_point == "top":
+            existing = file_path.read_text(encoding="utf-8")
+            file_path.write_text(block + "\n\n" + existing, encoding="utf-8")
+            return
 
-        # Load existing content
-        if file_path.exists():
-            existing_content = file_path.read_text(encoding="utf-8")
-        else:
-            existing_content = ""
-            # Create empty file with basic structure
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.info(f"File doesn't exist, will create: {filename}")
+        if insertion_point.startswith("section:"):
+            section_title = insertion_point[8:]
+            self._insert_after_section(file_path, section_title, block)
+            return
 
-        # Check for duplicates
-        patterns_to_apply = self._filter_duplicates(patterns, existing_content)
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write("\n" + block)
 
-        if not patterns_to_apply:
-            result["skipped"] = len(patterns)
-            logger.info(f"All patterns already exist in {filename}, skipping")
-            return result
+    def _insert_after_section(self, file_path: Path, section_title: str, block: str) -> None:
+        """Insert content after a specific section."""
+        content = file_path.read_text(encoding="utf-8")
 
-        # Create backup
-        if not dry_run and self.config.get("backup_enabled", True):
-            self._create_backup(file_path)
+        section_pattern = re.compile(
+            rf"^(##\s*{re.escape(section_title)}.*)$",
+            re.MULTILINE | re.IGNORECASE
+        )
+        match = section_pattern.search(content)
 
-        # Apply each pattern
-        for pattern in patterns_to_apply:
-            update_block = pattern.to_markdown_block()
+        if not match:
+            logger.warning(f"Section '## {section_title}' not found in {file_path.name}, appending instead")
+            with open(file_path, "a", encoding="utf-8") as f:
+                f.write("\n" + block)
+            return
 
-            if dry_run:
-                logger.info(f"[DRY RUN] Would add to {filename}: {pattern.summary}")
-                result["applied"] += 1
-                self._changes_made.append({
-                    "file": filename,
-                    "action": "would_add",
-                    "pattern": pattern.summary,
-                    "content_preview": pattern.content[:100],
-                })
-            else:
-                # Append to file
-                try:
-                    with open(file_path, "a", encoding="utf-8") as f:
-                        f.write("\n" + update_block)
+        start_pos = match.end()
+        remaining = content[start_pos:]
+        next_header = re.search(r"\n##\s+", remaining)
+        end_pos = start_pos + next_header.start() if next_header else len(content)
 
-                    logger.info(f"Updated {filename}: {pattern.summary}")
-                    result["applied"] += 1
-                    self._changes_made.append({
-                        "file": filename,
-                        "action": "added",
-                        "pattern": pattern.summary,
-                    })
-                except Exception as e:
-                    result["error"] = str(e)
-                    logger.error(f"Failed to write to {filename}: {e}")
-
-        return result
+        new_content = content[:end_pos] + "\n\n" + block + content[end_pos:]
+        file_path.write_text(new_content, encoding="utf-8")
 
     def _filter_duplicates(
         self,
         patterns: List[DiscoveredPattern],
         existing_content: str
     ) -> List[DiscoveredPattern]:
-        """
-        Filter out patterns that are already present in the file.
-
-        Args:
-            patterns: Patterns to check
-            existing_content: Current file content
-
-        Returns:
-            Patterns that should be applied (not duplicates)
-        """
+        """Filter out patterns already present in the file."""
         if not existing_content:
             return patterns
 
         filtered = []
         for pattern in patterns:
-            # Check if similar content already exists
             content_snippet = pattern.content[:50].lower()
             summary_snippet = pattern.summary[:50].lower()
 
-            # Look for the summary or content in existing file
             if content_snippet in existing_content.lower():
                 logger.debug(f"Skipping duplicate pattern: {pattern.summary}")
                 continue
@@ -318,7 +633,6 @@ class SoulEvolver:
                 logger.debug(f"Skipping similar pattern: {pattern.summary}")
                 continue
 
-            # Check for SoulForge update blocks with same summary
             if re.search(
                 rf"<!--\s*SoulForge.*-->\s*##\s*{re.escape(pattern.summary)}",
                 existing_content,
@@ -331,28 +645,23 @@ class SoulEvolver:
 
         return filtered
 
-    def _create_backup(self, file_path: Path) -> None:
-        """
-        Create a timestamped backup of the file.
-
-        Args:
-            file_path: Path to file to backup
-        """
+    def _create_backup(self, file_path: Path, backup_type: str = "auto") -> None:
+        """Create a timestamped backup of the file."""
         if not file_path.exists():
             return
 
         backup_dir = Path(self.config.backup_dir)
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"{file_path.name}.{timestamp}.bak"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        backup_name = f"{file_path.name}.{timestamp}.{backup_type}.bak"
         backup_path = backup_dir / backup_name
 
         shutil.copy2(file_path, backup_path)
         logger.info(f"Backup created: {backup_path}")
 
-        # Clean up old backups (keep last 10)
-        self._cleanup_old_backups(backup_dir, file_path.name, keep=10)
+        retention = self.config.get_backup_retention(file_path.name)
+        self._cleanup_old_backups(backup_dir, file_path.name, keep=retention)
 
     def _cleanup_old_backups(self, backup_dir: Path, original_name: str, keep: int = 10) -> None:
         """Remove old backups, keeping only the most recent N."""
@@ -361,21 +670,12 @@ class SoulEvolver:
             key=lambda p: p.stat().st_mtime,
             reverse=True
         )
-
         for old_backup in backups[keep:]:
             old_backup.unlink()
             logger.debug(f"Removed old backup: {old_backup}")
 
     def get_backup_list(self, filename: str) -> List[Dict[str, str]]:
-        """
-        Get list of backups for a file.
-
-        Args:
-            filename: Original file name
-
-        Returns:
-            List of dicts with path and timestamp
-        """
+        """Get list of backups for a file."""
         backup_dir = Path(self.config.backup_dir)
         if not backup_dir.exists():
             return []
@@ -386,25 +686,19 @@ class SoulEvolver:
             reverse=True
         )
 
-        return [
-            {
+        result = []
+        for b in backups:
+            parts = b.name.split(".")
+            backup_type = parts[-2] if len(parts) >= 3 else "auto"
+            result.append({
                 "path": str(b),
                 "timestamp": datetime.fromtimestamp(b.stat().st_mtime).isoformat(),
-            }
-            for b in backups
-        ]
+                "type": backup_type,
+            })
+        return result
 
     def restore_from_backup(self, filename: str, backup_path: str) -> bool:
-        """
-        Restore a file from backup.
-
-        Args:
-            filename: Target file name
-            backup_path: Path to backup file
-
-        Returns:
-            True if successful
-        """
+        """Restore a file from backup."""
         try:
             backup = Path(backup_path)
             target = self.workspace / filename
@@ -413,7 +707,6 @@ class SoulEvolver:
                 logger.error(f"Backup not found: {backup_path}")
                 return False
 
-            # Create backup of current file before restoring
             if target.exists():
                 self._create_backup(target)
 
@@ -441,21 +734,17 @@ class SoulEvolver:
             lines.append(f"  {filename}:")
             for c in changes:
                 action = "Added" if c["action"] == "added" else c["action"]
-                lines.append(f"    - {action}: {c['pattern']}")
+                ip = c.get("insertion_point", "append")
+                if ip != "append":
+                    lines.append(f"    - {action} ({ip}): {c['pattern']}")
+                else:
+                    lines.append(f"    - {action}: {c['pattern']}")
             lines.append("")
 
         return "\n".join(lines)
 
     def get_changelog(self, lang: str = "en") -> str:
-        """
-        Get the changelog content.
-
-        Args:
-            lang: Language code, 'en' or 'zh-CN'
-
-        Returns:
-            Changelog content as string, empty if not found
-        """
+        """Get the changelog content."""
         state_dir = Path(self.config.state_dir)
         filename = "CHANGELOG.md" if lang == "en" else "CHANGELOG.zh-CN.md"
         changelog_path = state_dir / filename

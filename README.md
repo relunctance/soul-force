@@ -34,7 +34,15 @@ You write them once. They stay the same forever. Your AI never gets smarter.
 - Reads `memory/*.md` daily logs
 - Analyzes `.learnings/` correction records
 - Uses **configured LLM** to detect recurring patterns
-- Auto-updates SOUL.md / USER.md / IDENTITY.md / MEMORY.md
+- Auto-updates SOUL.md / USER.md / IDENTITY.md / MEMORY.md / AGENTS.md / TOOLS.md
+- **Smart insertion points**: append / section-based / top-of-file
+
+### 🔒 Safety & Reliability
+- **Auto-rollback**: Writes are verified; failed writes auto-restore from backup
+- **Token budget**: Configurable max tokens per run (default 4096), newest-first truncation
+- **Schema validation**: Pydantic validation with 1-retry on LLM output errors
+- **Pattern expiry**: Blocks can have TTL; `--clean --expired` removes stale patterns
+- **Incremental backup**: Manual snapshots via `backup --create`
 
 ### 🏢 Multi-Agent Isolation
 Each agent's data is **physically isolated** — no cross-contamination:
@@ -47,14 +55,18 @@ Each agent's data is **physically isolated** — no cross-contamination:
 
 ### 🧠 hawk-bridge Integration
 - Reads hawk-bridge's **LanceDB vector memory**
-- Incremental processing — only analyzes new memories
+- Incremental sync — only fetches entries newer than last run
 - Shared data source with hawk-bridge for dual-layer backup
+- `last_hawk_sync` tracked per-agent for efficient re-runs
 
 ### 🔒 Safety
 - **Incremental updates**: Only appends, never overwrites
-- **Backup before write**: Auto-backup before every update
+- **Backup before write**: Auto-backup before every update (20 for important files, 10 for normal)
+- **Auto-rollback**: Post-write validation; failures auto-restore from snapshot
 - **Dedup detection**: Skips patterns already in files
+- **Schema validation**: Pydantic validation of LLM output with retry fallback
 - **Preview mode**: `--dry-run` to see changes first
+- **Pattern expiry**: Stale blocks can be auto-cleaned
 
 ---
 
@@ -142,14 +154,14 @@ A person who uses this AI assistant.
 ---
 
 <!-- SoulForge Update | 2026-04-04 -->
-## Discovered: User Works on VPN Project
+## Discovered: User Prefers Concise Replies
 
 **Source**: memory/2026-04-04.md
-**Pattern Type**: project
-**Confidence**: High (observed 2 times)
+**Pattern Type**: preference
+**Confidence**: High (observed 3 times)
 
 **Content**:
-User is building "SwiftPass VPN" - a subscription VPN service for Russian market. Uses XrayR/sing-box, Cloudflare, USDT+Stripe payments. Team: main + wukong + bajie + bailong + tseng.
+User prefers concise, actionable replies over verbose explanations. Lead with the answer, then optionally explain briefly if needed.
 
 <!-- /SoulForge Update -->
 
@@ -173,7 +185,7 @@ User repeatedly asks to "automate this". Never suggests manual workarounds. If a
 | File | Before | After |
 |------|--------|-------|
 | SOUL.md | 150 chars, 0 updates | 850 chars, 12 updates, 4 new behavior patterns |
-| USER.md | 80 chars, static | 620 chars, 6 updates, project + preferences tracked |
+| USER.md | 80 chars, static | 620 chars, 6 updates, preferences tracked |
 | IDENTITY.md | Empty | Full team structure documented |
 | MEMORY.md | Empty | 3 important decisions recorded |
 
@@ -197,9 +209,11 @@ hawk-bridge         Confidence Scoring     IDENTITY.md
 ```
 
 **Triggers:**
-- Same pattern appears **3+ times**
+- Same pattern appears **3+ times** (configurable threshold)
 - User corrects same issue **2+ times**
 - New preference or decision discovered
+- **Confidence-based filtering**: High (>0.8) auto-applied, Medium (0.5-0.8) needs review, Low (<0.5) ignored
+- `--force` flag overrides confidence threshold
 
 ---
 
@@ -212,7 +226,7 @@ hawk-bridge         Confidence Scoring     IDENTITY.md
 clawhub install soul-force --force
 
 # Manual clone
-git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
+git clone https://github.com/relunctance/soul-force.git ~/.openclaw/workspace/skills/soul-force
 ```
 
 > ⚠️ **Why `--force`?** ClawHub uses VirusTotal to scan all skills. Any skill that calls an external API is flagged as "suspicious" — this is a false positive. The `--force` flag bypasses this warning. SoulForce only uses the LLM you already configured in OpenClaw.
@@ -222,16 +236,23 @@ git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-
 > No API key configuration needed — SoulForce automatically reads your OpenClaw settings.
 
 ```bash
-
-```bash
 # Manual trigger
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run
 
 # Preview mode (no writes)
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --dry-run
+
+# Force apply all patterns (ignore confidence threshold)
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --force
+
+# Review mode: generate patterns without writing
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py review
+
+# Apply from review after confirmation
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py apply --confirm
 
 # Check status
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py status
 ```
 
 ### 3. Schedule (Recommended)
@@ -252,13 +273,41 @@ soulforge.py cron-set --show
 soulforge.py cron-set --remove
 ```
 
+### 4. Configuration
+
+```bash
+# View current config
+soulforge.py config --show
+
+# Set a config value (persists to ~/.soulforgerc.json)
+soulforge.py config --set max_token_budget=8192
+soulforge.py config --set rollback_auto_enabled=true
+```
+
+### 5. Maintenance
+
+```bash
+# Clean expired pattern blocks
+soulforge.py clean --expired           # dry run first
+soulforge.py clean --expired --confirm  # actually delete
+
+# Manual backup snapshot
+soulforge.py backup --create
+
+# Rollback last failed write (auto-restore from backup)
+soulforge.py rollback --auto
+
+# View diff since last run
+soulforge.py diff
+```
+
 Or via OpenClaw CLI directly:
 ```bash
 openclaw cron add --name soulforce-evolve --every 120m \
-  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
+  --message "exec python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run"
 ```
 
-### 4. View Changelog
+### 6. View Changelog
 
 ```bash
 # View English changelog
@@ -317,19 +366,22 @@ python3 soulforge.py run
 soul-force/
 ├── SKILL.md                    # OpenClaw Skill definition
 ├── README.md                   # English documentation
-├── README.zh-CN.md           # 中文文档
-├── soulforce/
-│   ├── __init__.py
-│   ├── config.py              # Config (multi-agent isolation)
-│   ├── memory_reader.py        # Multi-source memory reading
-│   ├── analyzer.py            # LLM-powered pattern analyzer
-│   └── evolver.py             # Safe file updates
+├── README.zh-CN.md            # 中文文档
+├── soulforge/
+│   ├── __init__.py            # Package init (v2.1.0)
+│   ├── config.py              # Config (multi-agent isolation, config.json)
+│   ├── memory_reader.py        # Multi-source memory reading (incremental)
+│   ├── analyzer.py            # LLM-powered pattern analyzer (schema validation)
+│   ├── evolver.py             # Safe file updates (auto-rollback)
+│   └── schema.py              # Pydantic models for pattern validation
 ├── scripts/
 │   └── soulforge.py            # CLI entry point
 ├── references/
-│   └── ARCHITECTURE.md        # Technical architecture
+│   ├── ARCHITECTURE.md        # Technical architecture
+│   ├── help-en.md             # English help text
+│   └── help-zh.md             # 中文帮助文本
 └── tests/
-    └── test_soulforge.py       # Unit tests (11/11 passing)
+    └── test_soulforge.py       # Unit tests
 ```
 
 ---

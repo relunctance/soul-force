@@ -1,6 +1,6 @@
 ---
 name: soul-force
-description: "OpenClaw - AI Agent Memory Evolution System. The core problem: OpenClaw never auto-updates SOUL.md, USER.md, or IDENTITY.md — corrections are forgotten, preferences fade, AI never gets smarter. SoulForce auto-evolves these files by analyzing memory patterns via your configured LLM. Use when: you want your AI to learn from corrections, discover recurring patterns, and evolve behavior automatically without manual editing. NOT for: one-shot tasks or when manual curation is preferred."
+description: "OpenClaw - AI Agent Memory Evolution System. The core problem: OpenClaw never auto-updates SOUL.md, USER.md, or IDENTITY.md — corrections are forgotten, preferences fade, AI never gets smarter. SoulForce auto-evolves these files by analyzing memory patterns via your configured LLM. Features: incremental analysis, confidence-based filtering, smart insertion points (append/section/top), review mode, manual backups. Use when: you want your AI to learn from corrections, discover recurring patterns, and evolve behavior automatically without manual editing. NOT for: one-shot tasks or when manual curation is preferred."
 metadata:
   openclaw:
     requires:
@@ -30,34 +30,108 @@ SoulForce fixes this.
 | ❌ Multi-agent memory contamination | ✅ Full isolation per workspace |
 | ❌ Manual memory maintenance | ✅ Cron automation — zero effort |
 | ❌ hawk-bridge memories fade away | ✅ Integrates with hawk-bridge vector store |
+| ❌ Low-quality patterns applied blindly | ✅ Confidence-based filtering (>0.8 auto, 0.5-0.8 review) |
+
+## New Features (v2.1)
+
+| Feature | Description |
+|---------|-------------|
+| **Incremental Analysis** | Only analyzes new entries since last run (via `last_run` timestamp) |
+| **Confidence Levels** | High (>0.8) auto-apply, Medium (0.5-0.8) review, Low (<0.5) ignore |
+| **Smart Insertion** | Insert patterns at `append`, `section:{title}`, or `top` |
+| **Review Mode** | `soulforge.py review` — preview patterns without writing |
+| **Apply from Review** | `soulforge.py apply --confirm` — apply reviewed patterns |
+| **Manual Backups** | `soulforge.py backup --create` — manual snapshots |
+| **Enhanced Retention** | Important files (SOUL.md, IDENTITY.md) keep 20 backups; others keep 10 |
+| **Externalized Help** | Help texts in `references/help-zh.md` and `references/help-en.md` |
+| **LLM via exec** | Uses OpenClaw's exec tool for LLM calls instead of direct API |
+| **Token Budget** | Truncates entries to stay within `max_token_budget` (default 4096 tokens) |
+| **Schema Validation** | Pydantic validation of LLM responses; retry on failure; raw output saved to `review/failed/` |
+| **Pattern Expiry** | Patterns can have `expires_at` date; `soulforge.py clean --expired` removes stale blocks |
+| **Auto-Rollback** | Writes are validated post-commit; failed writes auto-restore from snapshot |
+| **hawk-bridge Incremental** | Only syncs entries updated since last `hawk-bridge` sync timestamp |
+| **Config File** | `~/.soulforgerc.json` with `config --show` / `config --set key=value` |
+| **Feishu Notifications** | `run --notify` sends evolution results to configured Feishu chat |
 
 ## Quick Start
 
-### Install
+### Install / Update
 
 ```bash
 clawhub install soul-force --force
 ```
 
-> ⚠️ `--force` is needed because ClawHub's VirusTotal scan flags any skill calling external APIs as "suspicious" — false positive. SoulForce only calls your configured LLM.
+> ⚠️ `--force` is needed because ClawHub's VirusTotal scan flags any skill calling external APIs as "suspicious" — false positive. SoulForce only calls your configured LLM via OpenClaw.
 
 ### Run Evolution
 
-```
-exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run
 ```
 
 ### Dry Run (Preview)
 
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --dry-run
 ```
-exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
+
+### Force Apply (All Patterns)
+
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --force
+```
+
+### Review Mode
+
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py review
+```
+
+Review results are saved to `.soulforge-{agent}/review/latest.json`.
+
+### Apply from Review
+
+```bash
+# Preview what would be applied
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py apply
+
+# Confirm and apply
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py apply --confirm
+```
+
+### Manual Backup
+
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py backup --create
 ```
 
 ### Check Status
 
+```bash
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py status
 ```
-exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
-```
+
+## Confidence-Based Filtering
+
+| Confidence | Level | Action |
+|------------|-------|--------|
+| > 0.8 | High | Auto-apply |
+| 0.5 - 0.8 | Medium | Needs review (`soulforge.py review`) |
+| < 0.5 | Low | Ignored |
+
+Use `--force` flag to apply all patterns regardless of confidence.
+
+## Smart Insertion Points
+
+Patterns can specify where to insert in the target file:
+
+- **`append`** (default): Add to end of file
+- **`section:{title}`**: Insert under `## {title}` section
+- **`top`**: Insert at beginning of file
+
+## Incremental Analysis
+
+After the first run, SoulForge only analyzes entries newer than the last run timestamp stored in `.soulforge-{agent}/last_run`. To force a full analysis, delete the `last_run` file or run with `--force`.
 
 ## How It Works
 
@@ -104,34 +178,59 @@ python3 soulforge.py run  # auto-detects hawk-bridge
 
 ## Safety
 
-- **Incremental**: Only appends, never overwrites
+- **Incremental**: Only appends/inserts, never overwrites existing content
 - **Backups**: Timestamped backups in `.soulforge-{agent}/backups/`
+  - Important files (SOUL.md, IDENTITY.md): Keep 20 backups
+  - Normal files: Keep 10 backups
 - **Dry Run**: Preview with `--dry-run`
 - **Dedup**: Skips patterns already in files
-- **Threshold**: Patterns need 3+ occurrences before promoting
+- **Confidence Filter**: Low-confidence patterns ignored
+- **Review Mode**: Preview all patterns before applying
 
 ## Schedule (Recommended)
 
 ```bash
 # Set cron (every 2 hours)
-soulforge.py cron-set --every 120
+python3 soulforge.py cron-set --every 120
 
 # View/remove
-soulforge.py cron-set --show
-soulforge.py cron-set --remove
+python3 soulforge.py cron-set --show
+python3 soulforge.py cron-set --remove
 ```
+
+## All Commands
+
+```
+run          Run evolution process
+review       Review patterns without writing
+apply        Apply patterns from review
+backup       Backup management
+status       Show current status
+diff         Show changes since last run
+stats        Show evolution statistics
+inspect      Inspect patterns for a specific file
+restore      Restore files from backup
+reset        Reset SoulForge state
+template     Generate standard templates
+changelog    Show evolution changelog
+cron         Cron setup help
+cron-set     Set/update cron schedule
+help         Show help message
+```
+
+Run `python3 soulforge.py help` or `python3 soulforge.py help --zh` for full help.
 
 ## Changelog
 
 ```bash
 # View changelog (English)
-soulforge.py changelog
+python3 soulforge.py changelog
 
 # View changelog (Chinese)
-soulforge.py changelog --zh
+python3 soulforge.py changelog --zh
 
 # View full changelog
-soulforge.py changelog --full
+python3 soulforge.py changelog --full
 ```
 
 Changelogs are stored at:

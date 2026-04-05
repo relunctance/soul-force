@@ -34,7 +34,8 @@
 - 读取 `memory/*.md` 每日记忆日志
 - 分析 `.learnings/` 纠错记录
 - 调用 **配置的 LLM** 发现反复出现的模式
-- 自动更新 SOUL.md / USER.md / IDENTITY.md / MEMORY.md
+- 自动更新 SOUL.md / USER.md / IDENTITY.md / MEMORY.md / AGENTS.md / TOOLS.md
+- **智能插入位置**：追加 / 按章节插入 / 插入文件顶部
 
 ### 🏢 多 Agent 完全隔离
 每个 Agent 的数据**物理隔离**，绝不互相污染：
@@ -47,14 +48,18 @@
 
 ### 🧠 hawk-bridge 无缝集成
 - 读取 hawk-bridge 的 **LanceDB 向量记忆库**
-- 增量处理，只分析新记忆，不重复
+- 增量同步，只获取上次运行后的新条目
 - 进化结果与 hawk-bridge 共用同一套数据源
+- `last_hawk_sync` 时间戳追踪，高效增量处理
 
 ### 🔒 安全设计
 - **增量更新**：只追加，不覆盖已有内容
-- **写前备份**：每次更新前自动备份
+- **写前备份**：重要文件保留 20 个备份，普通文件 10 个
+- **自动回滚**：写入后验证，失败自动从快照恢复
+- **Schema 验证**：Pydantic 验证 LLM 输出，失败重试 1 次
 - **去重检测**：已有内容不重复添加
 - **预览模式**：`--dry-run` 先看结果再写入
+- **Pattern 过期**：可设置 TTL，`--clean --expired` 清理过期块
 
 ---
 
@@ -142,14 +147,14 @@
 ---
 
 <!-- SoulForge 更新 | 2026-04-04 -->
-## 发现：用户正在做 VPN 项目
+## 发现：用户偏好简洁回复
 
 **来源**: memory/2026-04-04.md
-**模式类型**: 项目
-**置信度**: 高（观察2次）
+**模式类型**: 偏好
+**置信度**: 高（观察3次）
 
 **内容**:
-用户正在搭建"SwiftPass VPN"——俄罗斯市场的订阅 VPN 服务。使用 XrayR/sing-box、Cloudflare、USDT+Stripe 收款。团队：main + wukong + bajie + bailong + tseng。
+用户偏好简洁、可操作的回复，而不是冗长的解释。先给答案，有必要再简要补充。
 
 <!-- /SoulForge 更新 -->
 
@@ -212,7 +217,7 @@ hawk-bridge          置信度评估            IDENTITY.md
 clawhub install soul-force --force
 
 # 或手动克隆
-git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-force
+git clone https://github.com/relunctance/soul-force.git ~/.openclaw/workspace/skills/soul-force
 ```
 
 > ⚠️ **为什么需要 `--force`？** ClawHub 使用 VirusTotal 扫描所有插件。任何调用外部 API 的插件都会被标记为"suspicious"——这是误报。`--force` 参数用于绕过这个误报。SoulForce 只使用你在 OpenClaw 中已配置的 LLM。
@@ -222,16 +227,23 @@ git clone https://github.com/relunctance/soul-force.git ~/.openclaw/skills/soul-
 > 无需配置 API Key — SoulForce 自动读取 OpenClaw 的配置。
 
 ```bash
-
-```bash
 # 手动触发
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run
 
 # 预览模式（只查看，不写入）
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run --dry-run
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --dry-run
+
+# 强制应用所有模式（忽略置信度阈值）
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run --force
+
+# Review 模式：生成模式但不写入
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py review
+
+# 确认后从 review 结果写入
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py apply --confirm
 
 # 查看状态
-python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py status
+python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py status
 ```
 
 ### 3. 定时任务（推荐）
@@ -255,10 +267,38 @@ soulforge.py cron-set --remove
 或直接通过 OpenClaw CLI：
 ```bash
 openclaw cron add --name soulforce-evolve --every 120m \
-  --message "exec python3 ~/.openclaw/skills/soul-force/scripts/soulforge.py run"
+  --message "exec python3 ~/.openclaw/workspace/skills/soul-force/scripts/soulforge.py run"
 ```
 
-### 4. 查看更新日志
+### 4. 配置管理
+
+```bash
+# 查看当前配置
+soulforge.py config --show
+
+# 设置配置值（持久化到 ~/.soulforgerc.json）
+soulforge.py config --set max_token_budget=8192
+soulforge.py config --set rollback_auto_enabled=true
+```
+
+### 5. 维护命令
+
+```bash
+# 清理过期 Pattern 块
+soulforge.py clean --expired           # 先 dry run
+soulforge.py clean --expired --confirm  # 确认后删除
+
+# 手动快照备份
+soulforge.py backup --create
+
+# 回滚上次失败的写入（自动从备份恢复）
+soulforge.py rollback --auto
+
+# 查看上次运行以来的变化
+soulforge.py diff
+```
+
+### 6. 查看更新日志
 
 ```bash
 # 查看英文更新日志
@@ -318,18 +358,21 @@ soul-force/
 ├── SKILL.md                    # OpenClaw Skill 定义
 ├── README.md                   # English documentation
 ├── README.zh-CN.md           # 中文文档
-├── soulforce/
-│   ├── __init__.py
-│   ├── config.py              # 配置（多 Agent 隔离）
-│   ├── memory_reader.py        # 多源记忆读取
-│   ├── analyzer.py            # LLM 模式分析
-│   └── evolver.py             # 安全文件更新
+├── soulforge/
+│   ├── __init__.py           # 包初始化（v2.1.0）
+│   ├── config.py              # 配置（多 Agent 隔离，支持 config.json）
+│   ├── memory_reader.py        # 多源记忆读取（增量）
+│   ├── analyzer.py            # LLM 模式分析（Schema 验证）
+│   ├── evolver.py             # 安全文件更新（自动回滚）
+│   └── schema.py              # Pydantic 数据模型
 ├── scripts/
 │   └── soulforge.py            # CLI 入口
 ├── references/
-│   └── ARCHITECTURE.md        # 技术架构
+│   ├── ARCHITECTURE.md        # 技术架构
+│   ├── help-en.md             # 英文帮助文本
+│   └── help-zh.md             # 中文帮助文本
 └── tests/
-    └── test_soulforge.py       # 单元测试（11/11 通过）
+    └── test_soulforge.py       # 单元测试
 ```
 
 ---
