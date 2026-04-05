@@ -59,6 +59,28 @@ from soulforge import SoulForgeConfig, MemoryReader, PatternAnalyzer, SoulEvolve
 from soulforge.analyzer import DiscoveredPattern
 
 
+def _get_components(args, need_reader=True, need_evolver=True, need_analyzer=False,
+                    analyzer_force_apply=False, extra_overrides=None):
+    """
+    Common initialization helper for all command functions.
+    Replaces repeated:
+        config = SoulForgeConfig(overrides={...})
+        setup_logging(config.log_level)
+        reader = MemoryReader(config.workspace, config)
+        evolver = SoulEvolver(config.workspace, config)
+    Returns (config, reader, evolver, analyzer).  Unneeded components are None.
+    """
+    overrides = {"workspace": args.workspace}
+    if extra_overrides:
+        overrides.update(extra_overrides)
+    config = SoulForgeConfig(overrides=overrides)
+    setup_logging(config.log_level)
+    reader = MemoryReader(config.workspace, config) if need_reader else None
+    evolver = SoulEvolver(config.workspace, config) if need_evolver else None
+    analyzer = PatternAnalyzer(config, force_apply=analyzer_force_apply) if need_analyzer else None
+    return config, reader, evolver, analyzer
+
+
 def _load_help_text(lang: str = "en") -> str:
     """Load help text from references/ directory."""
     skill_dir = Path(__file__).parent.parent
@@ -81,15 +103,15 @@ def cmd_run(args) -> int:
     """
     Run the evolution process - the main command.
     """
-    config = SoulForgeConfig(
-        config_path=args.config,
-        overrides={
+    config, reader, evolver, analyzer = _get_components(
+        args,
+        need_analyzer=True,
+        analyzer_force_apply=args.force,
+        extra_overrides={
             "dry_run": args.dry_run,
-            "workspace": args.workspace,
             "notify_on_complete": args.notify,
         }
     )
-    setup_logging(config.log_level)
 
     logger = logging.getLogger("soulforge.run")
     logger.info(f"SoulForge starting (workspace: {config.workspace})")
@@ -105,7 +127,6 @@ def cmd_run(args) -> int:
 
     # Step 1: Read memory sources
     print("📖 Reading memory sources...")
-    reader = MemoryReader(config.workspace, config)
     entries = reader.read_all()
 
     if not entries:
@@ -127,13 +148,6 @@ def cmd_run(args) -> int:
     else:
         print(f"   - hawk-bridge: not found (optional)")
 
-    # Detect hawk-bridge integration
-    hawk_skill_path = Path.home() / ".openclaw" / "workspace" / "skills" / "hawk-bridge"
-    if hawk_skill_path.exists():
-        print(f"   ✓ hawk-bridge detected: {hawk_skill_path}")
-    else:
-        print(f"   - hawk-bridge: not found (optional)")
-
     # Step 2: Read existing content
     print("📄 Checking existing file content...")
     existing_content = {}
@@ -144,7 +158,6 @@ def cmd_run(args) -> int:
 
     # Step 3: Analyze patterns
     print("🔍 Analyzing patterns with configured LLM...")
-    analyzer = PatternAnalyzer(config, force_apply=args.force)
     patterns = analyzer.analyze(entries, existing_content)
 
     if not patterns:
@@ -283,19 +296,18 @@ def _auto_create_cron(workspace: str) -> None:
 
 def cmd_review(args) -> int:
     """Review mode: generate pattern analysis without writing files."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, evolver, analyzer = _get_components(args, need_analyzer=True, analyzer_force_apply=True)
 
     # v2.2.0: Interactive review mode
     if getattr(args, "interactive", False):
-        return _cmd_review_interactive(args, config)
+        return _cmd_review_interactive(args, config, reader, evolver, analyzer)
 
     print(f"SoulForge Review (workspace: {config.workspace})")
     print("=" * 50)
     print("Generating patterns without writing to files...")
     print("")
 
-    reader = MemoryReader(config.workspace, config)
+    # reader already initialized by _get_components
     entries = reader.read_all()
 
     if not entries:
@@ -313,7 +325,6 @@ def cmd_review(args) -> int:
             existing_content[target] = target_path.read_text(encoding="utf-8")
 
     print("🔍 Analyzing patterns...")
-    analyzer = PatternAnalyzer(config, force_apply=True)
     patterns = analyzer.analyze(entries, existing_content)
 
     if not patterns:
@@ -346,7 +357,6 @@ def cmd_review(args) -> int:
     print(f"     - Medium confidence (0.5-0.8): {len(by_conf['medium'])}")
     print(f"     - Low confidence (<0.5): {len(by_conf['low'])}")
 
-    evolver = SoulEvolver(config.workspace, config)
     review_results = evolver.generate_review(filtered)
 
     print("")
@@ -416,7 +426,7 @@ def cmd_review(args) -> int:
     return 0
 
 
-def _cmd_review_interactive(args, config) -> int:
+def _cmd_review_interactive(args, config, reader, evolver, analyzer) -> int:
     """
     Interactive review mode: ask user y/n for each pattern.
 
@@ -441,7 +451,6 @@ def _cmd_review_interactive(args, config) -> int:
             existing_content[target] = target_path.read_text(encoding="utf-8")
 
     print("🔍 Analyzing patterns...")
-    analyzer = PatternAnalyzer(config, force_apply=True)
     patterns = analyzer.analyze(entries, existing_content)
 
     if not patterns:
@@ -545,12 +554,11 @@ def _cmd_review_interactive(args, config) -> int:
 
 def cmd_apply(args) -> int:
     """Apply patterns from the latest review output."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, _, evolver, _ = _get_components(args, need_reader=False)
 
     # v2.2.0: Interactive apply from interactive review decisions
     if getattr(args, "interactive", False):
-        return _cmd_apply_interactive(args, config)
+        return _cmd_apply_interactive(args, config, evolver)
 
     print(f"SoulForge Apply (workspace: {config.workspace})")
     print("=" * 50)
@@ -597,7 +605,7 @@ def cmd_apply(args) -> int:
     return 0
 
 
-def _cmd_apply_interactive(args, config) -> int:
+def _cmd_apply_interactive(args, config, evolver) -> int:
     """
     Apply patterns from an interactive review decisions file.
 
@@ -664,7 +672,6 @@ def _cmd_apply_interactive(args, config) -> int:
     decided_ids = {d["pattern_id"] for d in decided_to_apply}
     patterns_to_apply = [p for p in all_patterns if p.pattern_id in decided_ids]
 
-    evolver = SoulEvolver(config.workspace, config)
     result = evolver.apply_updates(patterns_to_apply, dry_run=False, backup_type="auto")
 
     print(f"\n   ✓ Updated {len(result.get('files_updated', []))} files")
@@ -680,15 +687,13 @@ def _cmd_apply_interactive(args, config) -> int:
 
 def cmd_backup_create(args) -> int:
     """Create a manual backup snapshot of all target files."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, _, evolver, _ = _get_components(args, need_reader=False)
 
     print(f"SoulForge Backup (workspace: {config.workspace})")
     print("=" * 50)
     print("Creating manual snapshot...")
     print("")
 
-    evolver = SoulEvolver(config.workspace, config)
     result = evolver.create_manual_backup()
 
     if result["backed_up"]:
@@ -710,13 +715,11 @@ def cmd_backup_create(args) -> int:
 
 def cmd_status(args) -> int:
     """Show current status - memory overview and target file states."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, _, _ = _get_components(args, need_evolver=False)
 
     print(f"SoulForge Status (workspace: {config.workspace})")
     print("=" * 50)
 
-    reader = MemoryReader(config.workspace, config)
     entries = reader.read_all()
     summary = reader.summarize()
 
@@ -783,13 +786,10 @@ def cmd_status(args) -> int:
 
 def cmd_diff(args) -> int:
     """Show what changed since last evolution run."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, evolver, _ = _get_components(args)
 
     print(f"SoulForge Diff (workspace: {config.workspace})")
     print("=" * 50)
-
-    evolver = SoulEvolver(config.workspace, config)
 
     for target in config.target_files:
         backups = evolver.get_backup_list(target)
@@ -820,13 +820,11 @@ def cmd_diff(args) -> int:
 
 def cmd_stats(args) -> int:
     """Show evolution statistics."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, evolver, _ = _get_components(args)
 
     print(f"SoulForge Stats (workspace: {config.workspace})")
     print("=" * 50)
 
-    reader = MemoryReader(config.workspace, config)
     entries = reader.read_all()
     summary = reader.summarize()
 
@@ -868,8 +866,7 @@ def cmd_stats(args) -> int:
 
 def cmd_inspect(args) -> int:
     """Inspect what would be evolved for a specific file."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, _, analyzer = _get_components(args, need_evolver=False, need_analyzer=True, analyzer_force_apply=True)
 
     target_file = args.file
     if not target_file.endswith(".md"):
@@ -890,10 +887,8 @@ def cmd_inspect(args) -> int:
         print(f"\n📄 File does not exist yet.")
 
     print(f"\n🔍 Analyzing patterns for {target_file}...")
-    reader = MemoryReader(config.workspace, config)
     entries = reader.read_all()
 
-    analyzer = PatternAnalyzer(config, force_apply=True)
     existing_content = {target_file: target_path.read_text()} if target_path.exists() else {}
     patterns = analyzer.analyze(entries, existing_content)
 
@@ -928,10 +923,7 @@ def cmd_inspect(args) -> int:
 
 def cmd_restore(args) -> int:
     """Restore files from backup."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
-
-    evolver = SoulEvolver(config.workspace, config)
+    config, _, evolver, _ = _get_components(args, need_reader=False)
 
     if args.restore_all:
         return _restore_all(evolver, config, args)
@@ -1095,8 +1087,7 @@ def _restore_all(evolver, config, args) -> int:
 
 def cmd_reset(args) -> int:
     """Reset all SoulForge state for this workspace."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, _, _ = _get_components(args, need_evolver=False)
 
     print(f"⚠️  SoulForge Reset (workspace: {config.workspace})")
     print("=" * 50)
@@ -1216,16 +1207,13 @@ _Last updated: {date}_
 
 def cmd_changelog(args) -> int:
     """Show the evolution changelog."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, _, evolver, _ = _get_components(args, need_reader=False)
 
     lang = "zh-CN" if args.zh else "en"
     lang_name = "中文" if lang == "zh-CN" else "English"
 
     print(f"SoulForge Changelog ({lang_name}) (workspace: {config.workspace})")
     print("=" * 50)
-
-    evolver = SoulEvolver(config.workspace, config)
 
     # v2.2.0: Visual changelog tree
     visual = getattr(args, "visual", False)
@@ -1365,8 +1353,7 @@ def cmd_cron_set(args) -> int:
 
 def cmd_clean(args) -> int:
     """Clean expired SoulForge update blocks from target files."""
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, reader, evolver, _ = _get_components(args)
 
     dry_run = args.dry_run
     mode = "DRY RUN" if dry_run else "LIVE"
@@ -1374,7 +1361,6 @@ def cmd_clean(args) -> int:
     print(f"SoulForge Clean Expired Blocks ({mode}) (workspace: {config.workspace})")
     print("=" * 50)
 
-    evolver = SoulEvolver(config.workspace, config)
     results = evolver.clean_expired(dry_run=dry_run)
 
     print(f"\n📊 Results:")
@@ -1404,8 +1390,7 @@ def cmd_rollback(args) -> int:
     Rollback automation command.
     Applies patterns with auto-rollback protection and reports results.
     """
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
+    config, _, _, _ = _get_components(args, need_reader=False, need_evolver=False)
 
     print(f"SoulForge Rollback Auto (workspace: {config.workspace})")
     print("=" * 50)
@@ -1500,13 +1485,13 @@ def cmd_help(args) -> int:
 
 
 def cmd_ask(args) -> int:
+    """Natural language query interface."""
+    config, _, evolver, _ = _get_components(args, need_reader=False)
     """
     Answer a natural language question about the agent's identity/memory.
 
     v2.2.0: Natural language query interface.
     """
-    config = SoulForgeConfig(overrides={"workspace": args.workspace})
-    setup_logging(config.log_level)
 
     question = getattr(args, "question", None)
     if not question:
@@ -1530,7 +1515,6 @@ def cmd_ask(args) -> int:
             pass
 
     # Load recent memory entries
-    reader = MemoryReader(config.workspace, config)
     memories = reader.read_all()
 
     # Ask the analyzer
