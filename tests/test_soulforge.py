@@ -44,6 +44,11 @@ DEFAULT_PATTERN_ID = "test_001"
 DEFAULT_UPDATE_TYPE = "SOUL"
 DEFAULT_CATEGORY = "behavior"
 DEFAULT_INSERTION_APPEND = "append"
+# Common file content templates
+FILE_CONTENT_SOUL = f"# {FILE_SOUL}\n\n"
+FILE_CONTENT_SOUL_WITH_EXISTING = f"# {FILE_SOUL}\n\nExisting content."
+FILE_CONTENT_USER = f"# {FILE_USER}\n\n"
+FILE_CONTENT_USER_WITH_EXISTING = f"# {FILE_USER}\n\nExisting content."
 # =============================================================================
 # Test Helpers
 # =============================================================================
@@ -84,6 +89,11 @@ def _make_pattern(
         auto_apply=auto_apply,
         needs_review=needs_review,
     )
+def _make_workspace_with_file(tmpdir, filename, content):
+    """Create a file in the workspace with given content."""
+    file_path = Path(tmpdir) / filename
+    file_path.write_text(content)
+    return file_path
 # =============================================================================
 # Config Tests
 # =============================================================================
@@ -374,8 +384,7 @@ def test_evolver_dry_run():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = SoulForgeConfig(overrides={"workspace": tmpdir, "dry_run": True})
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_SOUL
-        target_file.write_text(f"# {FILE_SOUL}\n\nExisting content.")
+        target_file = _make_workspace_with_file(tmpdir, FILE_SOUL, FILE_CONTENT_SOUL_WITH_EXISTING)
         pattern = _make_pattern(
             pattern_id=DEFAULT_PATTERN_ID,
             summary="Test pattern",
@@ -386,15 +395,14 @@ def test_evolver_dry_run():
         assert results["dry_run"] == True
         assert results["patterns_applied"] == 1
         # File should NOT be modified
-        assert target_file.read_text() == f"# {FILE_SOUL}\n\nExisting content."
+        assert target_file.read_text() == FILE_CONTENT_SOUL_WITH_EXISTING
         _pass("test_evolver_dry_run")
 def test_evolver_insertion_point_top():
     """Test evolver insertion at top of file."""
     with tempfile.TemporaryDirectory() as tmpdir:
         config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_SOUL
-        target_file.write_text(f"# {FILE_SOUL}\n\nExisting content.")
+        target_file = _make_workspace_with_file(tmpdir, FILE_SOUL, FILE_CONTENT_SOUL_WITH_EXISTING)
         pattern = _make_pattern(
             pattern_id=DEFAULT_PATTERN_ID,
             summary="Top pattern",
@@ -412,8 +420,7 @@ def test_evolver_insertion_point_section():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_SOUL
-        target_file.write_text(f"""# {FILE_SOUL}
+        target_file = _make_workspace_with_file(tmpdir, FILE_SOUL, f"""# {FILE_SOUL}
 ## Core Identity
 Original core content.
 ## Communication
@@ -440,8 +447,7 @@ def test_evolver_backup_retention_important():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = SoulForgeConfig(overrides={"workspace": tmpdir, "backup_retention_important": 20})
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_SOUL
-        target_file.write_text(f"# {FILE_SOUL}\n\nContent.")
+        target_file = _make_workspace_with_file(tmpdir, FILE_SOUL, FILE_CONTENT_SOUL)
         # Create 25 backups
         for i in range(25):
             target_file.write_text(f"# {FILE_SOUL}\n\nContent {i}.")
@@ -455,8 +461,7 @@ def test_evolver_backup_retention_normal():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = SoulForgeConfig(overrides={"workspace": tmpdir, "backup_retention_normal": 10})
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_USER
-        target_file.write_text(f"# {FILE_USER}\n\nContent.")
+        target_file = _make_workspace_with_file(tmpdir, FILE_USER, FILE_CONTENT_USER)
         # Create 15 backups
         for i in range(15):
             target_file.write_text(f"# {FILE_USER}\n\nContent {i}.")
@@ -470,8 +475,7 @@ def test_evolver_backup_type_naming():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
-        target_file = Path(tmpdir) / FILE_SOUL
-        target_file.write_text(f"# {FILE_SOUL}\n\nContent.")
+        target_file = _make_workspace_with_file(tmpdir, FILE_SOUL, FILE_CONTENT_SOUL)
         # Auto backup
         evolver._create_backup(target_file, backup_type="auto")
         # Manual backup
@@ -526,10 +530,8 @@ def test_evolver_create_manual_backup():
         config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
         # Create target files
-        soul_file = Path(tmpdir) / FILE_SOUL
-        soul_file.write_text(f"# {FILE_SOUL}\n\nContent.")
-        user_file = Path(tmpdir) / FILE_USER
-        user_file.write_text(f"# {FILE_USER}\n\nContent.")
+        soul_file = _make_workspace_with_file(tmpdir, FILE_SOUL, FILE_CONTENT_SOUL)
+        user_file = _make_workspace_with_file(tmpdir, FILE_USER, FILE_CONTENT_USER)
         result = evolver.create_manual_backup()
         assert len(result["backed_up"]) == 2
         backed_names = [Path(p).name for p in result["backed_up"]]
