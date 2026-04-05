@@ -32,6 +32,50 @@ def _pass(test_name):
     print(f"✓ {test_name} passed")
 
 
+def _make_config(tmpdir):
+    """Create SoulForgeConfig with workspace set to tmpdir."""
+    return SoulForgeConfig(overrides={"workspace": tmpdir})
+
+
+def _make_pattern(
+    pattern_id,
+    target_file="SOUL.md",
+    update_type="SOUL",
+    category="behavior",
+    summary="Test pattern",
+    content="Test content",
+    confidence=0.9,
+    evidence_count=4,
+    source_entries=None,
+    insertion_point="append",
+    auto_apply=True,
+    needs_review=False,
+):
+    """Create a DiscoveredPattern with common defaults."""
+    if source_entries is None:
+        source_entries = ["memory/2026-04-05.md"]
+    return DiscoveredPattern(
+        pattern_id=pattern_id,
+        target_file=target_file,
+        update_type=update_type,
+        category=category,
+        summary=summary,
+        content=content,
+        confidence=confidence,
+        evidence_count=evidence_count,
+        source_entries=source_entries,
+        insertion_point=insertion_point,
+        auto_apply=auto_apply,
+        needs_review=needs_review,
+    )
+
+
+# Common test constants
+TEST_SOURCE = "memory/2026-04-05.md"
+TEST_SOURCES = ["memory/2026-04-05.md"]
+TEST_TIMESTAMP = "2026-04-05"
+
+
 # =============================================================================
 # Config Tests
 # =============================================================================
@@ -60,7 +104,7 @@ def test_config_overrides():
 def test_config_backup_retention():
     """Test backup retention counts for important vs normal files."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         # Important files
         assert config.get_backup_retention("SOUL.md") == 20
         assert config.get_backup_retention("IDENTITY.md") == 20
@@ -74,7 +118,7 @@ def test_config_backup_retention():
 def test_config_last_run_timestamp():
     """Test last_run_timestamp read/write."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
 
         # Initially None
         assert config.get_last_run_timestamp() is None
@@ -108,7 +152,7 @@ def test_config_agent_suffix():
 def test_config_state_and_backup_dirs():
     """Test state_dir and backup_dir are properly isolated per agent."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         # Agent suffix is derived from tmpdir name, so state_dir contains .soulforge-{suffix}
         assert ".soulforge-" in config.state_dir
         assert ".soulforge-" in config.backup_dir
@@ -157,7 +201,7 @@ def test_memory_reader_daily_logs():
         test_file = memory_dir / "2026-04-05.md"
         test_file.write_text("# 2026-04-05\n\nTest conversation content here.")
 
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         reader = MemoryReader(tmpdir, config)
         entries = reader.read_all()
 
@@ -179,7 +223,7 @@ def test_memory_reader_incremental():
         new_file = memory_dir / "2026-04-05.md"
         new_file.write_text("# 2026-04-05\n\nNew content.")
 
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
 
         # Without last_run, should read all
         reader = MemoryReader(tmpdir, config)
@@ -217,7 +261,7 @@ Some insight about the user.
 ---
 """)
 
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         reader = MemoryReader(tmpdir, config)
         entries = reader.read_all()
 
@@ -230,7 +274,7 @@ Some insight about the user.
 def test_memory_reader_empty_workspace():
     """Test MemoryReader with no sources."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         reader = MemoryReader(tmpdir, config)
         entries = reader.read_all()
         assert len(entries) == 0
@@ -243,16 +287,8 @@ def test_memory_reader_empty_workspace():
 
 def test_discovered_pattern_insertion_point():
     """Test DiscoveredPattern insertion_point field."""
-    p = DiscoveredPattern(
+    p = _make_pattern(
         pattern_id="test_001",
-        target_file="SOUL.md",
-        update_type="SOUL",
-        category="behavior",
-        summary="Test pattern",
-        content="Test content",
-        confidence=0.9,
-        evidence_count=4,
-        source_entries=["memory/2026-04-05.md"],
         insertion_point="section:Core Identity",
     )
     assert p.insertion_point == "section:Core Identity"
@@ -264,28 +300,35 @@ def test_discovered_pattern_insertion_point():
 def test_discovered_pattern_confidence_levels():
     """Test confidence-based auto_apply and needs_review."""
     # High confidence
-    p_high = DiscoveredPattern(
-        pattern_id="p1", target_file="SOUL.md", update_type="SOUL",
-        category="b", summary="s", content="c",
-        confidence=0.9, evidence_count=3, source_entries=[],
+    p_high = _make_pattern(
+        pattern_id="p1",
+        confidence=0.9,
+        evidence_count=3,
+        source_entries=[],
     )
     assert p_high.auto_apply == True
     assert p_high.needs_review == False
 
     # Medium confidence
-    p_med = DiscoveredPattern(
-        pattern_id="p2", target_file="SOUL.md", update_type="SOUL",
-        category="b", summary="s", content="c",
-        confidence=0.6, evidence_count=2, source_entries=[],
+    p_med = _make_pattern(
+        pattern_id="p2",
+        confidence=0.6,
+        evidence_count=2,
+        source_entries=[],
+        auto_apply=False,
+        needs_review=True,
     )
     assert p_med.auto_apply == False
     assert p_med.needs_review == True
 
     # Low confidence
-    p_low = DiscoveredPattern(
-        pattern_id="p3", target_file="SOUL.md", update_type="SOUL",
-        category="b", summary="s", content="c",
-        confidence=0.3, evidence_count=1, source_entries=[],
+    p_low = _make_pattern(
+        pattern_id="p3",
+        confidence=0.3,
+        evidence_count=1,
+        source_entries=[],
+        auto_apply=False,
+        needs_review=False,
     )
     assert p_low.auto_apply == False
     assert p_low.needs_review == False
@@ -295,19 +338,9 @@ def test_discovered_pattern_confidence_levels():
 
 def test_discovered_pattern_to_dict():
     """Test DiscoveredPattern serialization."""
-    p = DiscoveredPattern(
+    p = _make_pattern(
         pattern_id="test_001",
-        target_file="SOUL.md",
-        update_type="SOUL",
-        category="behavior",
-        summary="Test pattern",
-        content="Test content",
-        confidence=0.85,
-        evidence_count=4,
-        source_entries=["memory/2026-04-05.md"],
         insertion_point="section:Core",
-        auto_apply=True,
-        needs_review=False,
     )
     d = p.to_dict()
     assert d["pattern_id"] == "test_001"
@@ -328,7 +361,7 @@ def test_discovered_pattern_from_dict():
         "content": "Content here",
         "confidence": 0.75,
         "evidence_count": 3,
-        "source_entries": ["memory/2026-04-05.md"],
+        "source_entries": [TEST_SOURCE],
         "suggested_section": "Preferences",
         "insertion_point": "append",
         "auto_apply": False,
@@ -344,17 +377,12 @@ def test_discovered_pattern_from_dict():
 
 def test_pattern_to_markdown_block():
     """Test DiscoveredPattern markdown formatting."""
-    pattern = DiscoveredPattern(
+    pattern = _make_pattern(
         pattern_id="test_001",
-        target_file="SOUL.md",
-        update_type="SOUL",
-        category="behavior",
         summary="User prefers numbered lists",
         content="User不喜欢看长文本选项，给选项时列序号让直接挑。",
-        confidence=0.9,
-        evidence_count=4,
-        source_entries=["memory/2026-04-04.md", "memory/2026-04-05.md"],
         insertion_point="section:沟通方式",
+        source_entries=["memory/2026-04-04.md", "memory/2026-04-05.md"],
     )
 
     block = pattern.to_markdown_block()
@@ -373,21 +401,14 @@ def test_pattern_to_markdown_block():
 def test_evolver_duplicate_filter():
     """Test that evolver filters duplicates."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         existing = "User prefers numbered lists\nMore content"
 
-        pattern = DiscoveredPattern(
+        pattern = _make_pattern(
             pattern_id="test_001",
-            target_file="SOUL.md",
-            update_type="SOUL",
-            category="behavior",
-            summary="User prefers numbered lists",
             content="User不喜欢看长文本选项，给选项时列序号。",
-            confidence=0.9,
-            evidence_count=4,
-            source_entries=["memory/2026-04-05.md"],
         )
 
         filtered = evolver._filter_duplicates([pattern], existing)
@@ -398,20 +419,14 @@ def test_evolver_duplicate_filter():
 def test_evolver_no_duplicate():
     """Test that evolver allows new patterns."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         existing = "Some existing content"
-        pattern = DiscoveredPattern(
+        pattern = _make_pattern(
             pattern_id="test_001",
-            target_file="SOUL.md",
-            update_type="SOUL",
-            category="behavior",
             summary="New pattern not in file",
             content="This is brand new information.",
-            confidence=0.9,
-            evidence_count=4,
-            source_entries=["memory/2026-04-05.md"],
         )
 
         filtered = evolver._filter_duplicates([pattern], existing)
@@ -428,16 +443,10 @@ def test_evolver_dry_run():
         target_file = Path(tmpdir) / "SOUL.md"
         target_file.write_text("# SOUL.md\n\nExisting content.")
 
-        pattern = DiscoveredPattern(
+        pattern = _make_pattern(
             pattern_id="test_001",
-            target_file="SOUL.md",
-            update_type="SOUL",
-            category="behavior",
             summary="Test pattern",
             content="Test content to add.",
-            confidence=0.9,
-            evidence_count=4,
-            source_entries=["memory/2026-04-05.md"],
             insertion_point="append",
         )
 
@@ -453,22 +462,16 @@ def test_evolver_dry_run():
 def test_evolver_insertion_point_top():
     """Test evolver insertion at top of file."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         target_file = Path(tmpdir) / "SOUL.md"
         target_file.write_text("# SOUL.md\n\nExisting content.")
 
-        pattern = DiscoveredPattern(
+        pattern = _make_pattern(
             pattern_id="test_001",
-            target_file="SOUL.md",
-            update_type="SOUL",
-            category="behavior",
             summary="Top pattern",
             content="This goes at top.",
-            confidence=0.9,
-            evidence_count=4,
-            source_entries=["memory/2026-04-05.md"],
             insertion_point="top",
         )
 
@@ -484,7 +487,7 @@ def test_evolver_insertion_point_top():
 def test_evolver_insertion_point_section():
     """Test evolver insertion after section."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         target_file = Path(tmpdir) / "SOUL.md"
@@ -499,16 +502,10 @@ Original core content.
 Other content.
 """)
 
-        pattern = DiscoveredPattern(
+        pattern = _make_pattern(
             pattern_id="test_001",
-            target_file="SOUL.md",
-            update_type="SOUL",
-            category="behavior",
             summary="New core item",
             content="New item for core identity.",
-            confidence=0.9,
-            evidence_count=4,
-            source_entries=["memory/2026-04-05.md"],
             insertion_point="section:Core Identity",
         )
 
@@ -568,7 +565,7 @@ def test_evolver_backup_retention_normal():
 def test_evolver_backup_type_naming():
     """Test backup file naming includes type (auto/manual)."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         target_file = Path(tmpdir) / "SOUL.md"
@@ -591,23 +588,18 @@ def test_evolver_backup_type_naming():
 def test_evolver_generate_review():
     """Test review mode output generation."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         patterns = [
-            DiscoveredPattern(
+            _make_pattern(
                 pattern_id="p1",
-                target_file="SOUL.md",
-                update_type="SOUL",
-                category="behavior",
                 summary="High conf pattern",
                 content="High conf content",
                 confidence=0.9,
                 evidence_count=4,
-                source_entries=["memory/2026-04-05.md"],
-                insertion_point="append",
             ),
-            DiscoveredPattern(
+            _make_pattern(
                 pattern_id="p2",
                 target_file="USER.md",
                 update_type="USER",
@@ -616,8 +608,8 @@ def test_evolver_generate_review():
                 content="Medium conf content",
                 confidence=0.6,
                 evidence_count=2,
-                source_entries=["memory/2026-04-05.md"],
-                insertion_point="append",
+                auto_apply=False,
+                needs_review=True,
             ),
         ]
 
@@ -641,7 +633,7 @@ def test_evolver_generate_review():
 def test_evolver_create_manual_backup():
     """Test manual backup creation."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         evolver = SoulEvolver(tmpdir, config)
 
         # Create target files
@@ -663,25 +655,13 @@ def test_evolver_create_manual_backup():
 def test_analyzer_separate_by_confidence():
     """Test analyzer confidence separation."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        config = SoulForgeConfig(overrides={"workspace": tmpdir})
+        config = _make_config(tmpdir)
         analyzer = PatternAnalyzer(config)
 
         patterns = [
-            DiscoveredPattern(
-                pattern_id="p1", target_file="SOUL.md", update_type="SOUL",
-                category="b", summary="s", content="c",
-                confidence=0.9, evidence_count=4, source_entries=[],
-            ),
-            DiscoveredPattern(
-                pattern_id="p2", target_file="SOUL.md", update_type="SOUL",
-                category="b", summary="s", content="c",
-                confidence=0.6, evidence_count=2, source_entries=[],
-            ),
-            DiscoveredPattern(
-                pattern_id="p3", target_file="SOUL.md", update_type="SOUL",
-                category="b", summary="s", content="c",
-                confidence=0.3, evidence_count=1, source_entries=[],
-            ),
+            _make_pattern(pattern_id="p1", confidence=0.9, evidence_count=4, source_entries=[]),
+            _make_pattern(pattern_id="p2", confidence=0.6, evidence_count=2, source_entries=[]),
+            _make_pattern(pattern_id="p3", confidence=0.3, evidence_count=1, source_entries=[]),
         ]
 
         result = analyzer.separate_by_confidence(patterns)
