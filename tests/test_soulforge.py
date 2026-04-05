@@ -24,6 +24,15 @@ from soulforge.evolver import SoulEvolver
 
 
 # =============================================================================
+# Test Helpers
+# =============================================================================
+
+def _pass(test_name):
+    """Print pass message for a test."""
+    print(f"✓ {test_name} passed")
+
+
+# =============================================================================
 # Config Tests
 # =============================================================================
 
@@ -34,7 +43,7 @@ def test_config_defaults():
     assert config.trigger_threshold == 3
     assert config.get("backup_enabled") == True
     assert "SOUL.md" in [Path(f).name for f in config.target_files]
-    print("✓ test_config_defaults passed")
+    _pass("test_config_defaults")
 
 
 def test_config_overrides():
@@ -45,7 +54,7 @@ def test_config_overrides():
     })
     assert config.workspace == "/tmp/test-workspace"
     assert config.trigger_threshold == 5
-    print("✓ test_config_overrides passed")
+    _pass("test_config_overrides")
 
 
 def test_config_backup_retention():
@@ -59,7 +68,7 @@ def test_config_backup_retention():
         assert config.get_backup_retention("USER.md") == 10
         assert config.get_backup_retention("MEMORY.md") == 10
         assert config.get_backup_retention("AGENTS.md") == 10
-        print("✓ test_config_backup_retention passed")
+        _pass("test_config_backup_retention")
 
 
 def test_config_last_run_timestamp():
@@ -80,7 +89,7 @@ def test_config_last_run_timestamp():
         assert ts is not None
         assert "T" in ts  # ISO format
 
-        print("✓ test_config_last_run_timestamp passed")
+        _pass("test_config_last_run_timestamp")
 
 
 def test_config_agent_suffix():
@@ -93,7 +102,7 @@ def test_config_agent_suffix():
 
     config3 = SoulForgeConfig(overrides={"workspace": "/path/to/workspace-tseng"})
     assert config3.agent_suffix == "tseng"
-    print("✓ test_config_agent_suffix passed")
+    _pass("test_config_agent_suffix")
 
 
 def test_config_state_and_backup_dirs():
@@ -104,7 +113,7 @@ def test_config_state_and_backup_dirs():
         assert ".soulforge-" in config.state_dir
         assert ".soulforge-" in config.backup_dir
         assert "backups" in config.backup_dir
-        print("✓ test_config_state_and_backup_dirs passed")
+        _pass("test_config_state_and_backup_dirs")
 
 
 def test_config_to_dict():
@@ -113,7 +122,7 @@ def test_config_to_dict():
     d = config.to_dict()
     assert d["workspace"] == "/test"
     assert d["dry_run"] == True
-    print("✓ test_config_to_dict passed")
+    _pass("test_config_to_dict")
 
 
 # =============================================================================
@@ -136,7 +145,7 @@ def test_memory_entry_creation():
     # Test to_dict
     d = entry.to_dict()
     assert d["source"] == "memory/2026-04-05.md"
-    print("✓ test_memory_entry_creation passed")
+    _pass("test_memory_entry_creation")
 
 
 def test_memory_reader_daily_logs():
@@ -155,7 +164,7 @@ def test_memory_reader_daily_logs():
         assert len(entries) >= 1
         entry = entries[0]
         assert entry.source_type == "daily_log"
-        print("✓ test_memory_reader_daily_logs passed")
+        _pass("test_memory_reader_daily_logs")
 
 
 def test_memory_reader_incremental():
@@ -183,7 +192,7 @@ def test_memory_reader_incremental():
         entries2 = reader2.read_all()  # Uses config's last_run
         timestamps = [e.timestamp for e in entries2]
         assert "2026-04-01" not in timestamps or "2026-04-05" in timestamps
-        print("✓ test_memory_reader_incremental passed")
+        _pass("test_memory_reader_incremental")
 
 
 def test_memory_reader_learnings():
@@ -215,7 +224,7 @@ Some insight about the user.
         assert len(entries) >= 1
         categories = [e.category for e in entries]
         assert "correction" in categories or "insight" in categories
-        print("✓ test_memory_reader_learnings passed")
+        _pass("test_memory_reader_learnings")
 
 
 def test_memory_reader_empty_workspace():
@@ -225,7 +234,7 @@ def test_memory_reader_empty_workspace():
         reader = MemoryReader(tmpdir, config)
         entries = reader.read_all()
         assert len(entries) == 0
-        print("✓ test_memory_reader_empty_workspace passed")
+        _pass("test_memory_reader_empty_workspace")
 
 
 # =============================================================================
@@ -249,7 +258,7 @@ def test_discovered_pattern_insertion_point():
     assert p.insertion_point == "section:Core Identity"
     assert p.auto_apply == True
     assert p.needs_review == False
-    print("✓ test_discovered_pattern_insertion_point passed")
+    _pass("test_discovered_pattern_insertion_point")
 
 
 def test_discovered_pattern_confidence_levels():
@@ -281,7 +290,7 @@ def test_discovered_pattern_confidence_levels():
     assert p_low.auto_apply == False
     assert p_low.needs_review == False
 
-    print("✓ test_discovered_pattern_confidence_levels passed")
+    _pass("test_discovered_pattern_confidence_levels")
 
 
 def test_discovered_pattern_to_dict():
@@ -305,7 +314,7 @@ def test_discovered_pattern_to_dict():
     assert d["insertion_point"] == "section:Core"
     assert d["auto_apply"] == True
     assert d["needs_review"] == False
-    print("✓ test_discovered_pattern_to_dict passed")
+    _pass("test_discovered_pattern_to_dict")
 
 
 def test_discovered_pattern_from_dict():
@@ -330,7 +339,7 @@ def test_discovered_pattern_from_dict():
     assert p.target_file == "USER.md"
     assert p.confidence == 0.75
     assert p.needs_review == True
-    print("✓ test_discovered_pattern_from_dict passed")
+    _pass("test_discovered_pattern_from_dict")
 
 
 def test_pattern_to_markdown_block():
@@ -354,7 +363,7 @@ def test_pattern_to_markdown_block():
     assert "behavior" in block
     assert "4" in block  # evidence count
     assert "section:沟通方式" in block  # insertion point in block
-    print("✓ test_pattern_to_markdown_block passed")
+    _pass("test_pattern_to_markdown_block")
 
 
 # =============================================================================
@@ -383,7 +392,7 @@ def test_evolver_duplicate_filter():
 
         filtered = evolver._filter_duplicates([pattern], existing)
         assert len(filtered) == 0  # Should be filtered out
-        print("✓ test_evolver_duplicate_filter passed")
+        _pass("test_evolver_duplicate_filter")
 
 
 def test_evolver_no_duplicate():
@@ -407,7 +416,7 @@ def test_evolver_no_duplicate():
 
         filtered = evolver._filter_duplicates([pattern], existing)
         assert len(filtered) == 1  # Should pass through
-        print("✓ test_evolver_no_duplicate passed")
+        _pass("test_evolver_no_duplicate")
 
 
 def test_evolver_dry_run():
@@ -438,7 +447,7 @@ def test_evolver_dry_run():
         assert results["patterns_applied"] == 1
         # File should NOT be modified
         assert target_file.read_text() == "# SOUL.md\n\nExisting content."
-        print("✓ test_evolver_dry_run passed")
+        _pass("test_evolver_dry_run")
 
 
 def test_evolver_insertion_point_top():
@@ -469,7 +478,7 @@ def test_evolver_insertion_point_top():
         assert "This goes at top." in content
         # Block starts with \n so content starts with the original, but update is near top
         assert "<!-- SoulForge Update" in content[:200]
-        print("✓ test_evolver_insertion_point_top passed")
+        _pass("test_evolver_insertion_point_top")
 
 
 def test_evolver_insertion_point_section():
@@ -513,7 +522,7 @@ Other content.
         comm_idx = next(i for i, l in enumerate(lines) if "Communication" in l)
         new_idx = next(i for i, l in enumerate(lines) if "New item for core" in l)
         assert core_idx < new_idx < comm_idx
-        print("✓ test_evolver_insertion_point_section passed")
+        _pass("test_evolver_insertion_point_section")
 
 
 def test_evolver_backup_retention_important():
@@ -533,7 +542,7 @@ def test_evolver_backup_retention_important():
         backup_dir = Path(config.backup_dir)
         backups = list(backup_dir.glob("SOUL.md.*.bak"))
         assert len(backups) == 20  # Should keep only 20
-        print("✓ test_evolver_backup_retention_important passed")
+        _pass("test_evolver_backup_retention_important")
 
 
 def test_evolver_backup_retention_normal():
@@ -553,7 +562,7 @@ def test_evolver_backup_retention_normal():
         backup_dir = Path(config.backup_dir)
         backups = list(backup_dir.glob("USER.md.*.bak"))
         assert len(backups) == 10  # Should keep only 10
-        print("✓ test_evolver_backup_retention_normal passed")
+        _pass("test_evolver_backup_retention_normal")
 
 
 def test_evolver_backup_type_naming():
@@ -576,7 +585,7 @@ def test_evolver_backup_type_naming():
 
         assert len(auto_backups) >= 1
         assert len(manual_backups) >= 1
-        print("✓ test_evolver_backup_type_naming passed")
+        _pass("test_evolver_backup_type_naming")
 
 
 def test_evolver_generate_review():
@@ -626,7 +635,7 @@ def test_evolver_generate_review():
         review_data = json.loads(review_path.read_text(encoding="utf-8"))
         assert review_data["total_patterns"] == 2
         assert len(review_data["patterns"]) == 2
-        print("✓ test_evolver_generate_review passed")
+        _pass("test_evolver_generate_review")
 
 
 def test_evolver_create_manual_backup():
@@ -648,7 +657,7 @@ def test_evolver_create_manual_backup():
         assert "SOUL.md" in backed_names
         assert "USER.md" in backed_names
         assert len(result["errors"]) == 0
-        print("✓ test_evolver_create_manual_backup passed")
+        _pass("test_evolver_create_manual_backup")
 
 
 def test_analyzer_separate_by_confidence():
@@ -679,7 +688,7 @@ def test_analyzer_separate_by_confidence():
         assert len(result["high"]) == 1
         assert len(result["medium"]) == 1
         assert len(result["low"]) == 1
-        print("✓ test_analyzer_separate_by_confidence passed")
+        _pass("test_analyzer_separate_by_confidence")
 
 
 # =============================================================================
