@@ -107,13 +107,8 @@ def _load_existing_content(config) -> Dict[str, str]:
     return existing_content
 
 
-def cmd_run(args) -> int:
-    """
-    Run the evolution process - the main command.
-    """
-    config = _setup_command(args)
-    logger = logging.getLogger("soulforge.run")
-
+def _log_startup_info(config, logger) -> None:
+    """Log startup information and mode selection."""
     logger.info(f"SoulForge starting (workspace: {config.workspace})")
 
     last_run = config.get_last_run_timestamp()
@@ -122,17 +117,18 @@ def cmd_run(args) -> int:
     else:
         print("📊 Full analysis mode: no previous run found")
 
-    # Token budget info
     print(f"📊 Token budget: {config.max_token_budget} max")
 
-    # Step 1: Read memory sources
+
+def _read_memory_sources(config) -> tuple:
+    """Read memory sources and return entries with summary."""
     print("📖 Reading memory sources...")
     reader = MemoryReader(config.workspace, config)
     entries = reader.read_all()
 
     if not entries:
         print("⚠️  No memory entries found. Nothing to analyze.")
-        return 0
+        return None, None
 
     summary = reader.summarize()
     print(f"   ✓ Read {summary['total_entries']} entries from {len(summary['sources'])} sources")
@@ -142,18 +138,18 @@ def cmd_run(args) -> int:
     if summary.get("last_hawk_sync"):
         print(f"   ✓ hawk-bridge last sync: {summary['last_hawk_sync']}")
 
-    # Step 2: Read existing content
-    print("📄 Checking existing file content...")
-    existing_content = _load_existing_content(config)
+    return entries, reader
 
-    # Step 3: Analyze patterns
+
+def _analyze_patterns(config, entries, existing_content, force: bool) -> Optional[List[DiscoveredPattern]]:
+    """Analyze patterns from entries and existing content."""
     print("🔍 Analyzing patterns with configured LLM...")
-    analyzer = PatternAnalyzer(config, force_apply=args.force)
+    analyzer = PatternAnalyzer(config, force_apply=force)
     patterns = analyzer.analyze(entries, existing_content)
 
     if not patterns:
         print("   ⚠️  No significant patterns found.")
-        return 0
+        return None
 
     # Filter by threshold
     filtered = analyzer.filter_by_threshold(patterns)
@@ -169,47 +165,58 @@ def cmd_run(args) -> int:
     if by_conf["low"]:
         print(f"   - Low confidence (ignored): {len(by_conf['low'])}")
 
-    auto_patterns = filtered if args.force else analyzer.filter_auto_apply(filtered)
-    review_patterns = analyzer.filter_needs_review(filtered)
+    return filtered
 
-    if not auto_patterns and not args.force:
-        print("\n⚠️  No high-confidence patterns to auto-apply.")
-        print("   Run 'soulforge.py review' to see medium-confidence patterns.")
-        print("   Or use 'soulforge.py run --force' to apply all patterns.")
-        return 0
 
-    # Step 4: Apply updates with rollback
+def _filter_patterns_for_application(config, filtered_patterns, force: bool) -> tuple:
+    """Filter patterns into auto-apply and review categories."""
+    analyzer = PatternAnalyzer(config, force_apply=force)
+    auto_patterns = filtered_patterns if force else analyzer.filter_auto_apply(filtered_patterns)
+    review_patterns = analyzer.filter_needs_review(filtered_patterns)
+    return auto_patterns, review_patterns
+
+
+def _apply_updates(config, auto_patterns, is_dry_run: bool) -> Dict[str, Any]:
+    """Apply pattern updates with rollback protection."""
     print("✏️  Applying updates (with rollback protection)...")
     evolver = SoulEvolver(config.workspace, config)
     results = evolver.apply_updates(
         auto_patterns,
-        rich_diff=args.dry_run  # v2.2.0: rich diff in dry-run mode
+        rich_diff=is_dry_run
     )
+    return results
 
-    if results["dry_run"]:
-        print(f"   ⚠️  DRY RUN - no files were written")
-        print("")
 
-        # v2.2.0: Show rich diff preview
-        rich_diffs = results.get("rich_diffs", {})
-        if rich_diffs:
-            print("=" * 60)
-            print(" UNIFIED DIFF PREVIEW")
-            print("=" * 60)
-            for filename, diff_text in rich_diffs.items():
-                print(f"\n--- {filename}")
-                print(f"+++ {filename}")
-                print(diff_text)
-        else:
-            print("   Would update:")
-            for filename in results["files_updated"]:
-                print(f"     - {filename}")
+def _display_dry_run_results(results: Dict[str, Any]) -> None:
+    """Display dry run results with rich diff preview."""
+    print(f"   ⚠️  DRY RUN - no files were written")
+    print("")
+
+    rich_diffs = results.get("rich_diffs", {})
+    if rich_diffs:
+        print("=" * 60)
+        print(" UNIFIED DIFF PREVIEW")
+        print("=" * 60)
+        for filename, diff_text in rich_diffs.items():
+            print(f"\n--- {filename}")
+            print(f"+++ {filename}")
+            print(diff_text)
     else:
-        print(f"   ✓ Updated {len(results['files_updated'])} files")
-        print(f"   ✓ Applied {results['patterns_applied']} patterns")
-        if results.get("rollbacks", 0) > 0:
-            print(f"   ⚠️  Rollbacks performed: {results['rollbacks']}")
+        print("   Would update:")
+        for filename in results["files_updated"]:
+            print(f"     - {filename}")
 
+
+def _display_apply_results(results: Dict[str, Any]) -> None:
+    """Display results of applying updates."""
+    print(f"   ✓ Updated {len(results['files_updated'])} files")
+    print(f"   ✓ Applied {results['patterns_applied']} patterns")
+    if results.get("rollbacks", 0) > 0:
+        print(f"   ⚠️  Rollbacks performed: {results['rollbacks']}")
+
+
+def _display_errors_and_review(results: Dict[str, Any], review_patterns) -> None:
+    """Display errors and pending review patterns."""
     if review_patterns:
         print(f"\n   ⚠️  {len(review_patterns)} medium-confidence patterns need review.")
 
@@ -219,7 +226,9 @@ def cmd_run(args) -> int:
             for file, error in err.items():
                 print(f"     - {file}: {error}")
 
-    # Send notification
+
+def _handle_notifications_and_summary(args, results, evolver) -> None:
+    """Send notifications and display summary if configured."""
     if args.notify and not results["dry_run"]:
         print("\n📬 Sending notification...")
         evolver.deliver_result(results)
@@ -227,6 +236,54 @@ def cmd_run(args) -> int:
     if results.get("changes"):
         print("")
         print(evolver.summarize_changes())
+
+
+def cmd_run(args) -> int:
+    """
+    Run the evolution process - the main command.
+    """
+    config = _setup_command(args)
+    logger = logging.getLogger("soulforge.run")
+
+    _log_startup_info(config, logger)
+
+    # Step 1: Read memory sources
+    entries, reader = _read_memory_sources(config)
+    if entries is None:
+        return 0
+
+    # Step 2: Read existing content
+    print("📄 Checking existing file content...")
+    existing_content = _load_existing_content(config)
+
+    # Step 3: Analyze patterns
+    filtered_patterns = _analyze_patterns(config, entries, existing_content, args.force)
+    if filtered_patterns is None:
+        return 0
+
+    auto_patterns, review_patterns = _filter_patterns_for_application(
+        config, filtered_patterns, args.force
+    )
+
+    if not auto_patterns and not args.force:
+        print("\n⚠️  No high-confidence patterns to auto-apply.")
+        print("   Run 'soulforge.py review' to see medium-confidence patterns.")
+        print("   Or use 'soulforge.py run --force' to apply all patterns.")
+        return 0
+
+    # Step 4: Apply updates with rollback
+    results = _apply_updates(config, auto_patterns, args.dry_run)
+
+    if results["dry_run"]:
+        _display_dry_run_results(results)
+    else:
+        _display_apply_results(results)
+
+    _display_errors_and_review(results, review_patterns)
+
+    # Step 5: Notifications and summary
+    evolver = SoulEvolver(config.workspace, config)
+    _handle_notifications_and_summary(args, results, evolver)
 
     print("")
     if results["dry_run"]:
@@ -299,99 +356,3 @@ def cmd_review(args) -> int:
     if not patterns:
         print("   ⚠️  No patterns found.")
         return 0
-
-    filtered = analyzer.filter_by_threshold(patterns)
-    filtered = analyzer.filter_expired(filtered)
-
-    # v2.2.0: Filter by tag
-    if getattr(args, "tag", None):
-        tag_filter = getattr(args, "tag", None)
-        if tag_filter:
-            filtered = analyzer.filter_by_tag(filtered, tag_filter)
-            print(f"   ✓ Filtered by tag '{tag_filter}': {len(filtered)} patterns")
-
-    # v2.2.0: Filter by confidence level
-    confidence_filter = getattr(args, "confidence", None)
-    if confidence_filter:
-        by_conf = analyzer.separate_by_confidence(filtered)
-        conf_map = {"high": "high", "medium": "medium", "low": "low"}
-        if confidence_filter in conf_map:
-            filtered = by_conf[conf_map[confidence_filter]]
-            print(f"   ✓ Filtered by confidence '{confidence_filter}': {len(filtered)} patterns")
-
-    by_conf = analyzer.separate_by_confidence(filtered)
-
-    print(f"   ✓ Found {len(filtered)} patterns:")
-    print(f"     - High confidence (>0.8): {len(by_conf['high'])}")
-    print(f"     - Medium confidence (0.5-0.8): {len(by_conf['medium'])}")
-    print(f"     - Low confidence (<0.5): {len(by_conf['low'])}")
-
-    evolver = SoulEvolver(config.workspace, config)
-    review_results = evolver.generate_review(filtered)
-
-    print("")
-    print(f"📄 Review output saved to:")
-    print(f"   {review_results['review_file']}")
-
-    # v2.2.0: Show conflict warnings
-    conflict_patterns = [p for p in filtered if p.has_conflict]
-    if conflict_patterns:
-        print(f"\n⚠️  CONFLICT WARNING: {len(conflict_patterns)} pattern(s) have conflicts detected:")
-        for p in conflict_patterns:
-            other_id = p.conflict_with
-            other = next((x for x in filtered if x.pattern_id == other_id), None)
-            other_name = other.summary if other else other_id
-            print(f"  - '{p.summary}' conflicts with '{other_name}'")
-
-    _print_pattern_details(by_conf["high"], "high", "🔵")
-    _print_pattern_details(by_conf["medium"], "medium", "🟡")
-    _print_pattern_details(by_conf["low"], "low", "🔴")
-
-    print("\nTo apply high-confidence patterns, run:")
-    print("  soulforge.py run")
-    print("")
-    print("To apply ALL patterns (including medium-confidence):")
-    print("  soulforge.py run --force")
-    print("")
-    print("To apply from review after confirmation:")
-    print("  soulforge.py apply --confirm")
-    print("")
-    print("To filter by tag:")
-    print(f"  soulforge.py review --tag preference")
-    print("  soulforge.py review --tag error --confidence high")
-
-    return 0
-
-
-def _cmd_review_interactive(args, config) -> int:
-    """
-    Interactive review mode: ask user y/n for each pattern.
-
-    v2.2.0: Interactive review.
-    """
-    print(f"SoulForge Review --interactive (workspace: {config.workspace})")
-    print("=" * 50)
-    print("Generating patterns without writing to files...")
-    print("(Press Ctrl+C to quit)\n")
-
-    reader = MemoryReader(config.workspace, config)
-    entries = reader.read_all()
-
-    if not entries:
-        print("⚠️  No memory entries found.")
-        return 0
-
-    existing_content = _load_existing_content(config)
-
-    print("🔍 Analyzing patterns...")
-    analyzer = PatternAnalyzer(config, force_apply=True)
-    patterns = analyzer.analyze(entries, existing_content)
-
-    if not patterns:
-        print("   ⚠️  No patterns found.")
-        return 0
-
-    filtered = analyzer.filter_by_threshold(patterns)
-    filtered = analyzer.filter_expired(filtered)
-
-    print(f"   ✓ Found {len(filtered)} patterns above threshold\n")
