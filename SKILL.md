@@ -32,7 +32,7 @@ SoulForce fixes this.
 | ❌ hawk-bridge memories fade away | ✅ Integrates with hawk-bridge vector store |
 | ❌ Low-quality patterns applied blindly | ✅ Confidence-based filtering (>0.8 auto, 0.5-0.8 review) |
 
-## New Features (v2.1)
+## New Features (v2.2)
 
 | Feature | Description |
 |---------|-------------|

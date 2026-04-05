@@ -29,6 +29,7 @@ class SoulForgeConfig:
         "workspace": "~/.openclaw/workspace",
         "memory_paths": [
             "memory/",
+            "MEMORY.md",
             ".learnings/",
         ],
         "target_files": [

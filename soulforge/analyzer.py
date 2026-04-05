@@ -687,21 +687,28 @@ except Exception as e:
 questions about an AI agent's identity, behavior patterns, and memory by synthesizing
 information from provided patterns and memory entries.
 
-Answer based ONLY on the provided context. Do not make up information.
-If the answer is not in the context, say "I don't have enough information to answer that."
-Be concise and helpful. Respond in the same language as the question."""
+IMPORTANT INSTRUCTIONS:
+1. Do NOT list or enumerate the patterns/memories in your answer — synthesize them into a coherent response
+2. If the answer requires combining multiple patterns, weave them together naturally
+3. Answer based ONLY on the provided context. Do not make up information.
+4. If the answer is not in the context, say "I don't have enough information to answer that."
+5. Be concise and helpful. Respond in the same language as the question.
+6. Your answer should feel like a natural conversation, not a data dump.
+7. Where multiple patterns or memories inform the same point, reference them together rather than separately."""
 
         user_prompt = f"""Question: {question}
 
-## Known Patterns (from recent SoulForge analysis):
+## Relevant Patterns (from recent SoulForge analysis):
+
+This agent has discovered the following behavioral patterns. Use them to inform your answer:
 
 {patterns_context}
 
-## Recent Memory Entries:
+## Relevant Memory Entries:
 
 {memories_context}
 
-Answer the question based on the context above."""
+Synthesize the information above to answer the question. Do not list the patterns or memories — weave them into a natural, informative answer."""
 
         response = self._call_llm(system_prompt, user_prompt)
         return response.strip()

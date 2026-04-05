@@ -53,6 +53,17 @@ def _get_tokenizer(encoding_name: str = "cl100k_base"):
 _tokenizer = None
 
 
+def _ms_to_iso(ms: Any) -> Optional[str]:
+    """Convert millisecond timestamp to ISO date string."""
+    if ms is None:
+        return None
+    try:
+        import time
+        return datetime.fromtimestamp(int(ms) / 1000).isoformat()[:19]
+    except (ValueError, TypeError, OSError):
+        return None
+
+
 def _tokenize_text(text: str) -> int:
     """
     Count tokens in text using tiktoken (real count) or char-based estimation (fallback).
@@ -170,6 +181,10 @@ class MemoryReader:
         # Read hawk-bridge with incremental sync
         if self.config.get("hawk_bridge_enabled", True):
             self._read_hawk_bridge()
+
+        # Read single-file memory sources (MEMORY.md, etc.)
+        new_entries = self._read_single_file_sources(since_timestamp)
+        self._entries.extend(new_entries)
 
         # Sort by timestamp (newest first) — prioritize recent entries within budget
         self._entries.sort(
@@ -360,6 +375,38 @@ class MemoryReader:
                 break
         return "insight"
 
+    def _read_single_file_sources(self, since: Optional[str] = None) -> List[MemoryEntry]:
+        """
+        Read single-file memory sources (MEMORY.md, etc.) from the workspace root.
+
+        Unlike directory-based sources (memory/, .learnings/), single files are read
+        as whole documents and parsed into one MemoryEntry per file.
+        """
+        entries = []
+        for mem_path in self.config.memory_paths:
+            path = Path(mem_path)
+            # Only process absolute paths that point to files
+            if path.is_absolute() and path.is_file():
+                if path.suffix.lower() != ".md":
+                    continue
+                try:
+                    content = path.read_text(encoding="utf-8")
+                    file_mtime = datetime.fromtimestamp(path.stat().st_mtime).isoformat()[:10]
+                    entry = MemoryEntry(
+                        source=str(path.relative_to(self.workspace)),
+                        source_type="memory_file",
+                        category="memory",
+                        content=self._extract_text_content(content),
+                        timestamp=file_mtime,
+                        importance=0.7,
+                        metadata={"file": str(path.name)}
+                    )
+                    entries.append(entry)
+                    logger.debug(f"Read single-file memory source: {path.name}")
+                except Exception as e:
+                    logger.warning(f"Failed to read {path}: {e}")
+        return entries
+
     def _read_hawk_bridge(self) -> None:
         """
         Read from hawk-bridge LanceDB vector store with incremental sync.
@@ -374,6 +421,8 @@ class MemoryReader:
                 for candidate in [
                     self.workspace.parent / "context-hawk" / "hawk",
                     Path("~/.openclaw/workspace/context-hawk/hawk").expanduser(),
+                    self.workspace.parent / "skills" / "hawk-bridge" / "python",
+                    self.workspace / "skills" / "hawk-bridge" / "python",
                 ]:
                     if candidate.exists():
                         hawk_path = str(candidate)
@@ -420,15 +469,17 @@ class MemoryReader:
                     # Try to convert to dict-like rows
                     if hasattr(query_vec, 'to_pydict'):
                         rows = query_vec.to_pydict()
-                        for i in range(len(rows.get("content", []))):
+                        # hawk-bridge uses 'text' field, not 'content'
+                        text_list = rows.get("content") or rows.get("text") or []
+                        for i in range(len(text_list)):
                             row = {k: v[i] if isinstance(v, list) else v for k, v in rows.items()}
                             entry = MemoryEntry(
                                 source="hawk-bridge",
                                 source_type="hawk_bridge",
-                                category=row.get("category", "semantic"),
-                                content=row.get("content", str(row)),
-                                timestamp=row.get("updated_at") or row.get("created_at"),
-                                importance=row.get("importance", 0.6),
+                                category=row.get("category", row.get("scope", "semantic")),
+                                content=row.get("content") or row.get("text", str(row))[:2000],
+                                timestamp=_ms_to_iso(row.get("updated_at") or row.get("created_at") or row.get("timestamp")),
+                                importance=float(row.get("importance", 0.6)),
                                 metadata=row.get("metadata", {})
                             )
                             self._entries.append(entry)
