@@ -53,6 +53,18 @@ SoulForce fixes this.
 | **Config File** | `~/.soulforgerc.json` with `config --show` / `config --set key=value` |
 | **Feishu Notifications** | `run --notify` sends evolution results to configured Feishu chat |
 
+## New Features (v2.2)
+
+| Feature | Description |
+|---------|-------------|
+| **Pattern Conflict Detection** | Detects patterns targeting same file with opposite advice; review shows ⚠️ CONFLICT |
+| **Natural Language Query** | `soulforge.py ask "question"` — synthesize answers from patterns and memories |
+| **Richer Dry-run Preview** | `run --dry-run` shows unified diff format (`--- file / +++ file / @@`) |
+| **Pattern Tags** | Patterns have `tags: List[str]`; filter by `--tag preference` or `--tag error` |
+| **Interactive Review** | `review --interactive` asks y/n per pattern; saves to `interactive_{timestamp}.json` |
+| **Real Token Counting** | Uses `tiktoken` for accurate token counts (falls back to chars/4) |
+| **Changelog Visualization** | `changelog --visual` shows evolution history as ASCII tree |
+
 ## Quick Start
 
 ### Install / Update
@@ -202,8 +214,8 @@ python3 soulforge.py cron-set --remove
 
 ```
 run          Run evolution process
-review       Review patterns without writing
-apply        Apply patterns from review
+review       Review patterns without writing (supports --tag, --confidence, --interactive)
+apply        Apply patterns from review (supports --confirm, --interactive)
 backup       Backup management
 status       Show current status
 diff         Show changes since last run
@@ -212,9 +224,10 @@ inspect      Inspect patterns for a specific file
 restore      Restore files from backup
 reset        Reset SoulForge state
 template     Generate standard templates
-changelog    Show evolution changelog
+changelog    Show evolution changelog (supports --visual)
 cron         Cron setup help
 cron-set     Set/update cron schedule
+ask          Natural language query (v2.2.0)
 help         Show help message
 ```
 

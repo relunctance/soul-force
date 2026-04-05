@@ -31,6 +31,49 @@ logger = logging.getLogger(__name__)
 CHARS_PER_TOKEN = 4
 
 
+def _get_tokenizer(encoding_name: str = "cl100k_base"):
+    """
+    Get a tiktoken encoding for accurate token counting.
+
+    Falls back to None if tiktoken is not available.
+    """
+    try:
+        import tiktoken
+        return tiktoken.get_encoding(encoding_name)
+    except ImportError:
+        logger.debug("tiktoken not available, using char-based token estimation")
+        return None
+
+
+# Module-level tokenizer instance (lazy-loaded)
+_tokenizer = None
+
+
+def _tokenize_text(text: str) -> int:
+    """
+    Count tokens in text using tiktoken (real count) or char-based estimation (fallback).
+
+    Args:
+        text: Text to count tokens for
+        encoding_name: tiktoken encoding name (default: cl100k_base)
+
+    Returns:
+        Token count (int)
+    """
+    global _tokenizer
+    if _tokenizer is None:
+        _tokenizer = _get_tokenizer()
+
+    if _tokenizer is not None:
+        try:
+            return len(_tokenizer.encode(text))
+        except Exception:
+            pass
+
+    # Fallback: char-based estimation
+    return len(text) // CHARS_PER_TOKEN
+
+
 @dataclass
 class MemoryEntry:
     """A single memory entry from any source."""
@@ -57,8 +100,8 @@ class MemoryEntry:
         }
 
     def estimated_tokens(self) -> int:
-        """Estimate token count for this entry."""
-        return len(self.content) // CHARS_PER_TOKEN
+        """Estimate token count for this entry using tiktoken (real) or char-based (fallback)."""
+        return _tokenize_text(self.content)
 
 
 class MemoryReader:

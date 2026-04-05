@@ -26,6 +26,8 @@ class ProposedUpdate(BaseModel):
     source_entries: List[str] = Field(default_factory=list, description="Source file references")
     suggested_section: Optional[str] = Field(None, description="Suggested section title")
     insertion_point: Optional[str] = Field("append", description="Where to insert: append|section:{title}|top")
+    tags: List[str] = Field(default_factory=list, description="Pattern tags for filtering")
+    conflict_with: Optional[str] = Field(None, description="ID of a conflicting pattern")
 
     @field_validator("insertion_point", mode="before")
     @classmethod
@@ -60,6 +62,9 @@ class DiscoveredPatternSchema(BaseModel):
     expires_at: Optional[str] = Field(None, description="ISO timestamp for pattern expiry")
     auto_apply: bool = False
     needs_review: bool = False
+    tags: List[str] = Field(default_factory=list)
+    conflict_with: Optional[str] = Field(None, description="ID of a conflicting pattern")
+    has_conflict: bool = Field(False, description="Whether this pattern conflicts with another")
 
 
 def validate_proposed_update(data: dict) -> tuple[Optional[ProposedUpdate], Optional[str]]:

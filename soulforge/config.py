@@ -56,6 +56,8 @@ class SoulForgeConfig:
         "hawk_sync_interval_hours": 24,
         # Token budget protection
         "max_token_budget": 4096,
+        # Token counting
+        "tokenizer_model": "cl100k_base",  # tiktoken encoding name
         # Backup retention
         "backup_retention_important": 20,
         "backup_retention_normal": 10,

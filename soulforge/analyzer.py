@@ -44,6 +44,9 @@ class DiscoveredPattern:
     auto_apply: bool = False
     needs_review: bool = False
     expires_at: Optional[str] = None  # ISO timestamp when pattern expires
+    tags: List[str] = field(default_factory=list)  # v2.2.0: pattern tags for filtering
+    conflict_with: Optional[str] = None  # v2.2.0: ID of conflicting pattern
+    has_conflict: bool = False  # v2.2.0: whether this pattern conflicts with another
 
     def __post_init__(self):
         if self.confidence > CONFIDENCE_HIGH:
@@ -70,6 +73,14 @@ class DiscoveredPattern:
         if self.expires_at:
             expires_line = f"\n**Expires**: {self.expires_at[:10]}"
 
+        tags_line = ""
+        if self.tags:
+            tags_line = f"\n**Tags**: {', '.join(self.tags)}"
+
+        conflict_line = ""
+        if self.has_conflict:
+            conflict_line = "\n**⚠️ CONFLICT**: This pattern conflicts with another pattern in the review."
+
         return f"""
 <!-- SoulForge Update | {timestamp} -->
 ## {self.summary}
@@ -77,7 +88,7 @@ class DiscoveredPattern:
 **Source**: {sources}
 **Pattern Type**: {self.category}
 **Confidence**: {conf_label} (observed {self.evidence_count} times)
-**Insertion**: {self.insertion_point}{expires_line}
+**Insertion**: {self.insertion_point}{expires_line}{tags_line}{conflict_line}
 
 **Content**:
 {self.content}
@@ -100,6 +111,9 @@ class DiscoveredPattern:
             "auto_apply": self.auto_apply,
             "needs_review": self.needs_review,
             "expires_at": self.expires_at,
+            "tags": self.tags,
+            "conflict_with": self.conflict_with,
+            "has_conflict": self.has_conflict,
         }
 
     @classmethod
@@ -119,6 +133,9 @@ class DiscoveredPattern:
             auto_apply=data.get("auto_apply", False),
             needs_review=data.get("needs_review", False),
             expires_at=data.get("expires_at"),
+            tags=data.get("tags", []),
+            conflict_with=data.get("conflict_with"),
+            has_conflict=data.get("has_conflict", False),
         )
 
     @classmethod
@@ -140,6 +157,8 @@ class DiscoveredPattern:
             source_entries=update.source_entries,
             suggested_section=update.suggested_section,
             insertion_point=insertion_point,
+            tags=update.tags,
+            conflict_with=update.conflict_with,
         )
 
     @staticmethod
@@ -280,6 +299,9 @@ Return ONLY JSON, no other text."""
 
         if not self.force_apply:
             patterns = self._filter_by_confidence(patterns)
+
+        # v2.2.0: Detect conflicts between patterns
+        patterns = self._detect_conflicts(patterns)
 
         logger.info(f"Analysis complete: {len(patterns)} patterns discovered")
         return patterns
@@ -534,3 +556,152 @@ except Exception as e:
                 # Can't parse expiry date, keep it
                 active.append(p)
         return active
+
+    def _detect_conflicts(self, patterns: List[DiscoveredPattern]) -> List[DiscoveredPattern]:
+        """
+        Detect conflicting patterns: same target, opposite advice.
+
+        Two patterns conflict if:
+        1. They target the same file
+        2. Their content or advice is semantically opposite
+
+        Uses simple heuristics:
+        - Same target_file AND same suggested_section (or same insertion_point)
+        - One says positive about X, another says negative about X (keyword-based)
+        - Content similarity but with negation keywords
+
+        Args:
+            patterns: List of DiscoveredPattern objects
+
+        Returns:
+            List with conflict flags set on conflicting patterns
+        """
+        # Group by target file
+        by_file: Dict[str, List[DiscoveredPattern]] = {}
+        for p in patterns:
+            key = f"{p.target_file}::{p.insertion_point}"
+            if key not in by_file:
+                by_file[key] = []
+            by_file[key].append(p)
+
+        negation_keywords = [
+            "not ", "don't ", "don't ", "never ", "no ", "avoid ",
+            "shouldn't ", "couldn't ", "won't ", "can't ",
+            "stop ", "quit ", "禁止", "不要", "别", "从不", "不能",
+        ]
+
+        for key, file_patterns in by_file.items():
+            if len(file_patterns) < 2:
+                continue
+
+            for i, p1 in enumerate(file_patterns):
+                for p2 in file_patterns[i + 1:]:
+                    # Check if content is contradictory
+                    c1_lower = p1.content.lower()
+                    c2_lower = p2.content.lower()
+
+                    # Find negation keywords in content
+                    p1_has_neg = any(kw in c1_lower for kw in negation_keywords)
+                    p2_has_neg = any(kw in c2_lower for kw in negation_keywords)
+
+                    # If one has negation and they're about similar topics, potential conflict
+                    content_words1 = set(c1_lower.split()) & set(c2_lower.split())
+                    overlap = len(content_words1) / max(len(set(c1_lower.split())), 1)
+
+                    if overlap > 0.3 and p1_has_neg != p2_has_neg:
+                        # Mark both as conflicting
+                        p1.has_conflict = True
+                        p2.has_conflict = True
+                        p1.conflict_with = p2.pattern_id
+                        p2.conflict_with = p1.pattern_id
+                        logger.warning(
+                            f"Conflict detected: '{p1.summary}' <-> '{p2.summary}' "
+                            f"(target: {p1.target_file}, overlap: {overlap:.1%})"
+                        )
+
+        return patterns
+
+    def filter_by_tag(self, patterns: List[DiscoveredPattern], tag: str) -> List[DiscoveredPattern]:
+        """Filter patterns by tag."""
+        return [p for p in patterns if tag in p.tags]
+
+    def filter_by_tags(self, patterns: List[DiscoveredPattern], tags: List[str], match_all: bool = False) -> List[DiscoveredPattern]:
+        """
+        Filter patterns by multiple tags.
+
+        Args:
+            patterns: List of patterns
+            tags: Tags to filter by
+            match_all: If True, pattern must have all tags; if False, any tag matches
+        """
+        if match_all:
+            return [p for p in patterns if all(t in p.tags for t in tags)]
+        return [p for p in patterns if any(t in p.tags for t in tags)]
+
+    def filter_conflicts(self, patterns: List[DiscoveredPattern], include: bool = True) -> List[DiscoveredPattern]:
+        """Filter patterns by conflict status."""
+        if include:
+            return [p for p in patterns if p.has_conflict]
+        return [p for p in patterns if not p.has_conflict]
+
+    def ask(
+        self,
+        question: str,
+        patterns: List[DiscoveredPattern],
+        memories: List[MemoryEntry],
+    ) -> str:
+        """
+        Answer a natural language question about the agent's identity/memory.
+
+        Uses the LLM to synthesize an answer from existing patterns and memories.
+        Does NOT write any files.
+
+        Args:
+            question: Natural language question
+            patterns: List of DiscoveredPattern from recent analysis
+            memories: List of MemoryEntry for additional context
+
+        Returns:
+            Natural language answer string
+        """
+        # Build context from patterns
+        patterns_text = []
+        for p in patterns:
+            tags_str = f" [Tags: {', '.join(p.tags)}]" if p.tags else ""
+            conflict_str = " ⚠️ CONFLICT" if p.has_conflict else ""
+            patterns_text.append(
+                f"- [{p.target_file}] {p.summary}{tags_str}{conflict_str}\n"
+                f"  Content: {p.content[:200]}\n"
+                f"  Confidence: {p.confidence:.1f} | Insertion: {p.insertion_point}"
+            )
+
+        patterns_context = "\n".join(patterns_text) if patterns_text else "No patterns found."
+
+        # Build context from memories (limited)
+        memories_text = []
+        for m in memories[:20]:
+            memories_text.append(f"- [{m.source_type}] {m.content[:150]}")
+        memories_context = "\n".join(memories_text) if memories_text else "No memory entries found."
+
+        system_prompt = """You are SoulForge, an AI identity analyst. Your task is to answer
+questions about an AI agent's identity, behavior patterns, and memory by synthesizing
+information from provided patterns and memory entries.
+
+Answer based ONLY on the provided context. Do not make up information.
+If the answer is not in the context, say "I don't have enough information to answer that."
+Be concise and helpful. Respond in the same language as the question."""
+
+        user_prompt = f"""Question: {question}
+
+## Known Patterns (from recent SoulForge analysis):
+
+{patterns_context}
+
+## Recent Memory Entries:
+
+{memories_context}
+
+Answer the question based on the context above."""
+
+        response = self._call_llm(system_prompt, user_prompt)
+        return response.strip()

@@ -4,8 +4,8 @@ SoulForge CLI - AI Agent Memory Evolution System
 
 Usage:
     python3 soulforge.py run [--workspace PATH] [--dry-run] [--force] [--notify]
-    python3 soulforge.py review [--workspace PATH]
-    python3 soulforge.py apply --confirm [--workspace PATH]
+    python3 soulforge.py review [--workspace PATH] [--tag TAG] [--confidence LEVEL] [--interactive]
+    python3 soulforge.py apply --confirm [--workspace PATH] [--interactive]
     python3 soulforge.py backup --create [--workspace PATH]
     python3 soulforge.py status [--workspace PATH]
     python3 soulforge.py diff [--workspace PATH]
@@ -14,12 +14,13 @@ Usage:
     python3 soulforge.py restore [FILE] [--backup PATH] [--preview] [--all]
     python3 soulforge.py reset [--workspace PATH]
     python3 soulforge.py template [--workspace PATH]
-    python3 soulforge.py changelog [--zh] [--full]
+    python3 soulforge.py changelog [--zh] [--full] [--visual]
     python3 soulforge.py cron [--every MINUTES]
     python3 soulforge.py clean --expired [--workspace PATH] [--dry-run]
     python3 soulforge.py rollback --auto [--workspace PATH]
     python3 soulforge.py config --show [--workspace PATH]
     python3 soulforge.py config --set KEY=VALUE [--workspace PATH]
+    python3 soulforge.py ask "question" [--workspace PATH]
     python3 soulforge.py help
 
 Examples:
@@ -27,13 +28,19 @@ Examples:
     python3 soulforge.py run --dry-run
     python3 soulforge.py run --force --notify
     python3 soulforge.py review
+    python3 soulforge.py review --tag preference
+    python3 soulforge.py review --tag error --confidence high
+    python3 soulforge.py review --interactive
     python3 soulforge.py apply --confirm
+    python3 soulforge.py apply --interactive
     python3 soulforge.py backup --create
     python3 soulforge.py status
     python3 soulforge.py clean --expired
     python3 soulforge.py rollback --auto
     python3 soulforge.py config --show
     python3 soulforge.py config --set max_token_budget=8192
+    python3 soulforge.py ask "What is my communication style?"
+    python3 soulforge.py changelog --visual
     python3 soulforge.py help
 """
 
@@ -49,6 +56,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from soulforge import SoulForgeConfig, MemoryReader, PatternAnalyzer, SoulEvolver
+from soulforge.analyzer import DiscoveredPattern
 
 
 def _load_help_text(lang: str = "en") -> str:
@@ -155,14 +163,29 @@ def cmd_run(args) -> int:
     # Step 4: Apply updates with rollback
     print("✏️  Applying updates (with rollback protection)...")
     evolver = SoulEvolver(config.workspace, config)
-    results = evolver.apply_updates(auto_patterns)
+    results = evolver.apply_updates(
+        auto_patterns,
+        rich_diff=args.dry_run  # v2.2.0: rich diff in dry-run mode
+    )
 
     if results["dry_run"]:
         print(f"   ⚠️  DRY RUN - no files were written")
         print("")
-        print("   Would update:")
-        for filename in results["files_updated"]:
-            print(f"     - {filename}")
+
+        # v2.2.0: Show rich diff preview
+        rich_diffs = results.get("rich_diffs", {})
+        if rich_diffs:
+            print("=" * 60)
+            print(" UNIFIED DIFF PREVIEW")
+            print("=" * 60)
+            for filename, diff_text in rich_diffs.items():
+                print(f"\n--- {filename}")
+                print(f"+++ {filename}")
+                print(diff_text)
+        else:
+            print("   Would update:")
+            for filename in results["files_updated"]:
+                print(f"     - {filename}")
     else:
         print(f"   ✓ Updated {len(results['files_updated'])} files")
         print(f"   ✓ Applied {results['patterns_applied']} patterns")
@@ -201,6 +224,10 @@ def cmd_review(args) -> int:
     config = SoulForgeConfig(overrides={"workspace": args.workspace})
     setup_logging(config.log_level)
 
+    # v2.2.0: Interactive review mode
+    if getattr(args, "interactive", False):
+        return _cmd_review_interactive(args, config)
+
     print(f"SoulForge Review (workspace: {config.workspace})")
     print("=" * 50)
     print("Generating patterns without writing to files...")
@@ -234,6 +261,22 @@ def cmd_review(args) -> int:
     filtered = analyzer.filter_by_threshold(patterns)
     filtered = analyzer.filter_expired(filtered)
 
+    # v2.2.0: Filter by tag
+    if getattr(args, "tag", None):
+        tag_filter = getattr(args, "tag", None)
+        if tag_filter:
+            filtered = analyzer.filter_by_tag(filtered, tag_filter)
+            print(f"   ✓ Filtered by tag '{tag_filter}': {len(filtered)} patterns")
+
+    # v2.2.0: Filter by confidence level
+    confidence_filter = getattr(args, "confidence", None)
+    if confidence_filter:
+        by_conf = analyzer.separate_by_confidence(filtered)
+        conf_map = {"high": "high", "medium": "medium", "low": "low"}
+        if confidence_filter in conf_map:
+            filtered = by_conf[conf_map[confidence_filter]]
+            print(f"   ✓ Filtered by confidence '{confidence_filter}': {len(filtered)} patterns")
+
     by_conf = analyzer.separate_by_confidence(filtered)
 
     print(f"   ✓ Found {len(filtered)} patterns:")
@@ -248,15 +291,29 @@ def cmd_review(args) -> int:
     print(f"📄 Review output saved to:")
     print(f"   {review_results['review_file']}")
 
+    # v2.2.0: Show conflict warnings
+    conflict_patterns = [p for p in filtered if p.has_conflict]
+    if conflict_patterns:
+        print(f"\n⚠️  CONFLICT WARNING: {len(conflict_patterns)} pattern(s) have conflicts detected:")
+        for p in conflict_patterns:
+            other_id = p.conflict_with
+            other = next((x for x in filtered if x.pattern_id == other_id), None)
+            other_name = other.summary if other else other_id
+            print(f"  - '{p.summary}' conflicts with '{other_name}'")
+
     if by_conf["high"]:
         print("\n🔵 HIGH CONFIDENCE PATTERNS (will auto-apply):")
         print("-" * 40)
         for p in by_conf["high"]:
-            print(f"  [{p.target_file}] {p.summary}")
+            conflict_flag = " ⚠️ CONFLICT" if p.has_conflict else ""
+            tags_str = f" [Tags: {', '.join(p.tags)}]" if p.tags else ""
+            print(f"  [{p.target_file}] {p.summary}{conflict_flag}{tags_str}")
             print(f"    Confidence: {p.confidence:.1f}, Evidence: {p.evidence_count}")
             print(f"    Insertion: {p.insertion_point}")
             if p.expires_at:
                 print(f"    Expires: {p.expires_at}")
+            if p.tags:
+                print(f"    Tags: {', '.join(p.tags)}")
             print(f"    Content: {p.content[:100]}...")
             print("")
 
@@ -264,9 +321,13 @@ def cmd_review(args) -> int:
         print("\n🟡 MEDIUM CONFIDENCE PATTERNS (need review):")
         print("-" * 40)
         for p in by_conf["medium"]:
-            print(f"  [{p.target_file}] {p.summary}")
+            conflict_flag = " ⚠️ CONFLICT" if p.has_conflict else ""
+            tags_str = f" [Tags: {', '.join(p.tags)}]" if p.tags else ""
+            print(f"  [{p.target_file}] {p.summary}{conflict_flag}{tags_str}")
             print(f"    Confidence: {p.confidence:.1f}, Evidence: {p.evidence_count}")
             print(f"    Insertion: {p.insertion_point}")
+            if p.tags:
+                print(f"    Tags: {', '.join(p.tags)}")
             print(f"    Content: {p.content[:100]}...")
             print("")
 
@@ -285,6 +346,137 @@ def cmd_review(args) -> int:
     print("")
     print("To apply from review after confirmation:")
     print("  soulforge.py apply --confirm")
+    print("")
+    print("To filter by tag:")
+    print(f"  soulforge.py review --tag preference")
+    print("  soulforge.py review --tag error --confidence high")
+
+    return 0
+
+
+def _cmd_review_interactive(args, config) -> int:
+    """
+    Interactive review mode: ask user y/n for each pattern.
+
+    v2.2.0: Interactive review.
+    """
+    print(f"SoulForge Review --interactive (workspace: {config.workspace})")
+    print("=" * 50)
+    print("Generating patterns without writing to files...")
+    print("(Press Ctrl+C to quit)\n")
+
+    reader = MemoryReader(config.workspace, config)
+    entries = reader.read_all()
+
+    if not entries:
+        print("⚠️  No memory entries found.")
+        return 0
+
+    existing_content = {}
+    for target in config.target_files:
+        target_path = Path(config.workspace) / target
+        if target_path.exists():
+            existing_content[target] = target_path.read_text(encoding="utf-8")
+
+    print("🔍 Analyzing patterns...")
+    analyzer = PatternAnalyzer(config, force_apply=True)
+    patterns = analyzer.analyze(entries, existing_content)
+
+    if not patterns:
+        print("   ⚠️  No patterns found.")
+        return 0
+
+    filtered = analyzer.filter_by_threshold(patterns)
+    filtered = analyzer.filter_expired(filtered)
+
+    print(f"   ✓ Found {len(filtered)} patterns above threshold\n")
+
+    # Decisions: pattern_id -> bool (True=apply, False=skip)
+    decisions: Dict[str, bool] = {}
+    auto_yes_high = False
+
+    for i, p in enumerate(filtered, 1):
+        conflict_flag = " ⚠️ CONFLICT" if p.has_conflict else ""
+        tags_str = f" [Tags: {', '.join(p.tags)}]" if p.tags else ""
+
+        print(f"[{i}/{len(filtered)}] Apply \"{p.summary}\"?{conflict_flag}{tags_str}")
+        print(f"    File: {p.target_file} | Confidence: {p.confidence:.1f} | Evidence: {p.evidence_count}")
+        print(f"    Insertion: {p.insertion_point}")
+        if p.expires_at:
+            print(f"    Expires: {p.expires_at}")
+        print(f"    Content: {p.content[:200]}")
+        if p.has_conflict:
+            other = next((x for x in filtered if x.pattern_id == p.conflict_with), None)
+            if other:
+                print(f"    ⚠️  Conflicts with: \"{other.summary}\"")
+        print(f"    [y] Yes  [n] No  [a] Yes to all high-confidence  [q] Quit")
+
+        while True:
+            try:
+                choice = input("Choice: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\n\nInterrupted. Saving decisions so far...")
+                choice = "q"
+
+            if choice == "q":
+                print("\nQuitting interactive review.")
+                break
+            elif choice == "y":
+                decisions[p.pattern_id] = True
+                print("    → Will apply")
+                break
+            elif choice == "n":
+                decisions[p.pattern_id] = False
+                print("    → Will skip")
+                break
+            elif choice == "a":
+                auto_yes_high = True
+                # Apply all remaining high-confidence patterns automatically
+                for remaining in filtered[i - 1:]:
+                    if remaining.confidence > 0.8 and not remaining.has_conflict:
+                        decisions[remaining.pattern_id] = True
+                        print(f"    → Auto-applying high-confidence: {remaining.summary}")
+                    else:
+                        decisions[remaining.pattern_id] = False
+                        print(f"    → Auto-skipping: {remaining.summary}")
+                print("\n   All remaining patterns decided. Ending interactive mode.")
+                choice = "q"
+                break
+            else:
+                print("    Invalid choice. Use: y / n / a / q")
+
+        if choice == "q":
+            break
+
+    # Save decisions to file
+    review_dir = Path(config.review_dir)
+    review_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    decisions_path = review_dir / f"interactive_{timestamp}.json"
+
+    decision_records = []
+    for p in filtered:
+        if p.pattern_id in decisions:
+            decision_records.append({
+                "pattern_id": p.pattern_id,
+                "decision": decisions[p.pattern_id],
+                "summary": p.summary,
+                "target_file": p.target_file,
+                "confidence": p.confidence,
+            })
+
+    decisions_data = {
+        "timestamp": datetime.now().isoformat(),
+        "total_patterns": len(filtered),
+        "decided_count": len(decision_records),
+        "decisions": decision_records,
+    }
+
+    decisions_path.write_text(json.dumps(decisions_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n📄 Interactive decisions saved to:")
+    print(f"   {decisions_path}")
+    print(f"\nTo apply these decisions, run:")
+    print(f"   soulforge.py apply --interactive")
 
     return 0
 
@@ -293,6 +485,10 @@ def cmd_apply(args) -> int:
     """Apply patterns from the latest review output."""
     config = SoulForgeConfig(overrides={"workspace": args.workspace})
     setup_logging(config.log_level)
+
+    # v2.2.0: Interactive apply from interactive review decisions
+    if getattr(args, "interactive", False):
+        return _cmd_apply_interactive(args, config)
 
     print(f"SoulForge Apply (workspace: {config.workspace})")
     print("=" * 50)
@@ -329,6 +525,87 @@ def cmd_apply(args) -> int:
         return 1
 
     print(f"   ✓ Updated {len(result.get('files_updated', []))} files")
+    print(f"   ✓ Applied {result.get('patterns_applied', 0)} patterns")
+
+    if result.get("errors"):
+        print(f"   ⚠️  Errors:")
+        for err in result.get("errors", []):
+            print(f"     - {err}")
+
+    return 0
+
+
+def _cmd_apply_interactive(args, config) -> int:
+    """
+    Apply patterns from an interactive review decisions file.
+
+    v2.2.0: Interactive apply.
+    """
+    print(f"SoulForge Apply --interactive (workspace: {config.workspace})")
+    print("=" * 50)
+
+    # Find most recent interactive decisions file
+    review_dir = Path(config.review_dir)
+    if not review_dir.exists():
+        print("❌ No review directory found. Run 'soulforge.py review --interactive' first.")
+        return 1
+
+    interactive_files = sorted(review_dir.glob("interactive_*.json"), reverse=True)
+    if not interactive_files:
+        print("❌ No interactive decisions file found. Run 'soulforge.py review --interactive' first.")
+        return 1
+
+    decisions_path = interactive_files[0]
+    print(f"Loading decisions from: {decisions_path}")
+
+    try:
+        decisions_data = json.loads(decisions_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"❌ Failed to load decisions file: {e}")
+        return 1
+
+    decisions = decisions_data.get("decisions", [])
+    if not decisions:
+        print("⚠️  No decisions found in file.")
+        return 0
+
+    decided_to_apply = [d for d in decisions if d.get("decision", False)]
+    print(f"\nDecisions loaded: {len(decided_to_apply)} to apply, {len(decisions) - len(decided_to_apply)} to skip")
+
+    if not decided_to_apply:
+        print("No patterns selected to apply.")
+        return 0
+
+    print("\nPatterns to apply:")
+    for d in decided_to_apply:
+        print(f"  [{d['target_file']}] {d['summary']} (confidence: {d['confidence']:.1f})")
+
+    print("")
+    confirm = input("Apply these patterns? Type 'yes' to confirm: ")
+    if confirm.lower() != "yes":
+        print("Cancelled.")
+        return 0
+
+    # Load the review patterns and filter by decisions
+    review_path = review_dir / "latest.json"
+    if not review_path.exists():
+        print("❌ No review/latest.json found. Run 'soulforge.py review --interactive' first.")
+        return 1
+
+    try:
+        review_data = json.loads(review_path.read_text(encoding="utf-8"))
+        all_patterns = [DiscoveredPattern.from_dict(p) for p in review_data.get("patterns", [])]
+    except Exception as e:
+        print(f"❌ Failed to load review data: {e}")
+        return 1
+
+    decided_ids = {d["pattern_id"] for d in decided_to_apply}
+    patterns_to_apply = [p for p in all_patterns if p.pattern_id in decided_ids]
+
+    evolver = SoulEvolver(config.workspace, config)
+    result = evolver.apply_updates(patterns_to_apply, dry_run=False, backup_type="auto")
+
+    print(f"\n   ✓ Updated {len(result.get('files_updated', []))} files")
     print(f"   ✓ Applied {result.get('patterns_applied', 0)} patterns")
 
     if result.get("errors"):
@@ -887,6 +1164,18 @@ def cmd_changelog(args) -> int:
     print("=" * 50)
 
     evolver = SoulEvolver(config.workspace, config)
+
+    # v2.2.0: Visual changelog tree
+    visual = getattr(args, "visual", False)
+    if visual:
+        content = evolver.get_changelog(lang, visual=True)
+        if not content:
+            print("No changelog found yet.")
+            print("Run 'soulforge.py run' first to create evolution history.")
+            return 1
+        print("\n" + content)
+        return 0
+
     content = evolver.get_changelog(lang)
 
     if not content:
@@ -1148,6 +1437,51 @@ def cmd_help(args) -> int:
     return 0
 
 
+def cmd_ask(args) -> int:
+    """
+    Answer a natural language question about the agent's identity/memory.
+
+    v2.2.0: Natural language query interface.
+    """
+    config = SoulForgeConfig(overrides={"workspace": args.workspace})
+    setup_logging(config.log_level)
+
+    question = getattr(args, "question", None)
+    if not question:
+        print("❌ No question provided. Usage: soulforge.py ask \"your question\"")
+        return 1
+
+    print(f"SoulForge Ask (workspace: {config.workspace})")
+    print("=" * 50)
+    print(f"Question: {question}")
+    print("")
+    print("🔍 Analyzing...")
+
+    # Load patterns from latest review if available
+    review_path = Path(config.review_dir) / "latest.json"
+    patterns = []
+    if review_path.exists():
+        try:
+            review_data = json.loads(review_path.read_text(encoding="utf-8"))
+            patterns = [DiscoveredPattern.from_dict(p) for p in review_data.get("patterns", [])]
+        except Exception:
+            pass
+
+    # Load recent memory entries
+    reader = MemoryReader(config.workspace, config)
+    memories = reader.read_all()
+
+    # Ask the analyzer
+    analyzer = PatternAnalyzer(config)
+    answer = analyzer.ask(question, patterns, memories)
+
+    print(f"\n💡 Answer:\n")
+    print(answer)
+    print("")
+
+    return 0
+
+
 def main() -> int:
     """Main entry point for the SoulForge CLI."""
     import sys
@@ -1182,11 +1516,15 @@ def main() -> int:
 
     # review
     review_parser = subparsers.add_parser("review", help="Review patterns without writing")
+    review_parser.add_argument("--tag", help="Filter patterns by tag (v2.2.0)")
+    review_parser.add_argument("--confidence", choices=["high", "medium", "low"], help="Filter by confidence level (v2.2.0)")
+    review_parser.add_argument("--interactive", action="store_true", help="Interactive review mode (v2.2.0)")
     review_parser.set_defaults(func=cmd_review)
 
     # apply
     apply_parser = subparsers.add_parser("apply", help="Apply patterns from review output")
     apply_parser.add_argument("--confirm", action="store_true")
+    apply_parser.add_argument("--interactive", action="store_true", help="Apply from interactive review decisions (v2.2.0)")
     apply_parser.set_defaults(func=cmd_apply)
 
     # backup
@@ -1232,6 +1570,7 @@ def main() -> int:
     changelog_parser = subparsers.add_parser("changelog", help="Show changelog")
     changelog_parser.add_argument("--zh", action="store_true")
     changelog_parser.add_argument("--full", action="store_true")
+    changelog_parser.add_argument("--visual", action="store_true", help="Show as ASCII tree (v2.2.0)")
     changelog_parser.set_defaults(func=cmd_changelog)
 
     # cron
@@ -1262,6 +1601,11 @@ def main() -> int:
     config_parser.add_argument("--show", action="store_true", help="Show current config")
     config_parser.add_argument("--set", help="Set key=value")
     config_parser.set_defaults(func=cmd_config)
+
+    # ask
+    ask_parser = subparsers.add_parser("ask", help="Ask a question about the agent's identity (v2.2.0)")
+    ask_parser.add_argument("question", help="The question to ask")
+    ask_parser.set_defaults(func=cmd_ask)
 
     # help
     help_parser = subparsers.add_parser("help", help="Show help message")

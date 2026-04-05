@@ -12,22 +12,27 @@
     soulforge.py restore [FILE] [--backup PATH] [--preview] [--all]
     soulforge.py reset [--workspace PATH]
     soulforge.py template [TEMPLATE]
-    soulforge.py changelog [--zh] [--full]
+    soulforge.py changelog [--zh] [--full] [--visual]
     soulforge.py cron [--every MINUTES]
     soulforge.py cron-set [--every N] [--show] [--remove]
-    soulforge.py review [--workspace PATH]
-    soulforge.py apply [--confirm] [--workspace PATH]
+    soulforge.py review [--workspace PATH] [--tag TAG] [--confidence LEVEL] [--interactive]
+    soulforge.py apply [--confirm] [--workspace PATH] [--interactive]
     soulforge.py backup --create [--workspace PATH]
+    soulforge.py ask "question" [--workspace PATH]
     soulforge.py help
 
 ## 示例
 
     soulforge.py run                    # 运行进化（带自动回滚）
-    soulforge.py run --dry-run        # 预览模式（不写入）
+    soulforge.py run --dry-run        # 预览模式（显示 unified diff，不写入）
     soulforge.py run --force           # 强制应用所有模式（忽略置信度）
     soulforge.py run --notify         # 运行并发送飞书通知
     soulforge.py review                # 审查模式：生成模式但不写入
+    soulforge.py review --tag preference # 按标签过滤模式
+    soulforge.py review --confidence high --tag error  # 组合过滤
+    soulforge.py review --interactive   # 交互式审查：逐个确认
     soulforge.py apply --confirm        # 从 review 结果确认后写入
+    soulforge.py apply --interactive   # 从交互式审查结果应用
     soulforge.py backup --create       # 创建手动快照
     soulforge.py status               # 查看当前状态（含 token 预算）
     soulforge.py clean --expired      # 清除过期模式块
@@ -36,6 +41,8 @@
     soulforge.py config --show        # 显示当前配置
     soulforge.py config --set max_token_budget=8192  # 设置配置
     soulforge.py changelog --zh        # 查看中文更新日志
+    soulforge.py changelog --visual   # 以 ASCII tree 形式查看更新日志
+    soulforge.py ask "我的沟通风格是什么？"  # 自然语言查询
 
 ---
 
@@ -53,9 +60,14 @@
 输出所有待应用的模式，支持 JSON 格式导出。
 结果保存到 `.soulforge-{agent}/review/latest.json`。
 
+- `--tag TAG`: 按标签过滤模式 (v2.2.0)
+- `--confidence LEVEL`: 按置信度过滤：high, medium, low (v2.2.0)
+- `--interactive`: 交互式审查：逐个询问是否应用 (v2.2.0)
+
 ### apply
 从 review 结果确认后写入。需要先运行 `soulforge.py review`。
 - `--confirm`: 确认应用所有审查过的模式
+- `--interactive`: 从交互式审查决策文件应用 (v2.2.0)
 
 ### backup
 备份管理：
@@ -90,10 +102,19 @@
 - 不带参数：列出所有可用模板
 - 带参数：显示指定模板内容
 
-### changelog [--zh] [--full]
+### changelog [--zh] [--full] [--visual]
 显示进化日志。
 - `--zh`: 显示中文版本（默认）
 - `--full`: 显示完整日志（不截断）
+- `--visual`: 以 ASCII tree 可视化形式显示 (v2.2.0)
+
+### ask "question"
+用自然语言查询智能体的身份/记忆 (v2.2.0)。
+从已有 patterns 和 memories 合成答案，不写入任何文件，不会触发分析。
+
+示例：
+    soulforge.py ask "我的沟通风格是什么？"
+    soulforge.py ask "代码审查有什么偏好？"
 
 ### cron [--every MINUTES]
 显示定时任务设置帮助。

@@ -2,6 +2,77 @@
 
 All notable changes to SoulForge are documented here.
 
+## [2.2.0] - 2026-04-05
+
+### Added
+
+#### 1. Pattern Conflict Detection (P0)
+- **schema.py**: `DiscoveredPattern` schema新增 `conflict_with: Optional[str]` 和 `has_conflict: bool` 字段
+- **schema.py**: `ProposedUpdate` schema新增 `tags` 和 `conflict_with` 字段
+- **analyzer.py**: `DiscoveredPattern` 新增 `tags` 和 `conflict_with` 字段，`to_markdown_block()` 输出冲突警告
+- **analyzer.py**: `_detect_conflicts()` 方法检测冲突 pattern（相同 target、相反建议）
+- **analyzer.py**: CLI review 时显示冲突警告（⚠️ CONFLICT）
+
+#### 2. Natural Language Query Interface (P1)
+- **analyzer.py**: `PatternAnalyzer.ask()` 方法 - 基于 patterns 和 memories 合成自然语言答案
+- **soulforge.py**: 新增 `ask "question"` 命令，不写入文件，只输出查询结果
+- 使用 LLM 从已有 patterns 和 memories 合成答案
+
+#### 3. Richer Dry-run Preview (P1)
+- **evolver.py**: `apply_updates()` 新增 `rich_diff` 参数
+- **evolver.py**: `_generate_rich_diff()` 生成 unified diff 格式预览
+- **soulforge.py**: `run --dry-run` 输出完整 diff-like 预览（`--- file / +++ file / @@`）
+- 冲突 pattern 高亮显示
+
+#### 4. Pattern Tags & Filtering (P1)
+- **schema.py**: `DiscoveredPattern` 新增 `tags: List[str]` 字段
+- **schema.py**: `ProposedUpdate` 新增 `tags` 字段
+- **analyzer.py**: `DiscoveredPattern` 新增 `tags` 字段
+- **analyzer.py**: `filter_by_tag()` 和 `filter_by_tags()` 方法
+- **analyzer.py**: LLM prompt 指导生成 tags
+- **soulforge.py**: CLI 支持 `--tag` 和 `--confidence` 过滤：
+  - `soulforge.py review --tag preference`
+  - `soulforge.py review --tag error --confidence high`
+
+#### 5. Interactive Review Mode (P1)
+- **soulforge.py**: 新增 `review --interactive` 命令
+- 逐个 pattern 提问：`[1] Apply "pattern summary"? [y/n/a/q]`
+- `y=yes, n=no, a=yes to all high-confidence, q=quit`
+- 选择结果写入 `.soulforge-{agent}/review/interactive_{timestamp}.json`
+- `apply --interactive` 读取该文件应用决策
+
+#### 6. Real Token Counting (P2)
+- **memory_reader.py**: `_get_tokenizer()` 和 `_tokenize_text()` 使用 tiktoken 真实 token 计数
+- **memory_reader.py**: `tiktoken` 不可用时回退到 `chars/4` 估算
+- **config.py**: 新增 `tokenizer_model` 配置项（默认 "cl100k_base"）
+- **memory_reader.py**: `MemoryEntry.estimated_tokens()` 使用 tiktoken（真实）或 char-based（回退）
+- CLI `status` 显示真实预估 token 消耗
+
+#### 7. Changelog Visualization (P2)
+- **evolver.py**: `_format_visual_changelog()` 输出 ASCII tree 格式
+- **evolver.py**: `get_changelog(lang, visual=True)` 支持可视化模式
+- **soulforge.py**: `changelog --visual` 输出 ASCII tree
+- 格式：
+  ```
+  v2.1.0 (2026-04-05)
+  ├── SOUL.md
+  │   └── +2 patterns (communication)
+  ├── USER.md
+  │   └── +1 pattern (preference)
+  └── IDENTITY.md
+      └── no changes
+  ```
+
+### Changed
+- **schema.py**: `DiscoveredPatternSchema` 新增 `tags`, `conflict_with`, `has_conflict` 字段
+- **analyzer.py**: `to_markdown_block()` 新增标签和冲突标记输出
+- **evolver.py**: `apply_updates()` 新增 `rich_diff` 参数控制 diff 输出
+- **memory_reader.py**: `estimated_tokens()` 优先使用 tiktoken
+- **soulforge.py**: `cmd_run` 在 dry-run 模式下使用 `rich_diff=True`
+- **soulforge.py**: `cmd_review` 新增 `--tag`, `--confidence`, `--interactive` 参数
+- **soulforge.py**: `cmd_changelog` 新增 `--visual` 参数
+- **soulforge.py**: `cmd_apply` 新增 `--interactive` 参数
+
 ## [2.1.0] - 2026-04-05
 
 ### Added

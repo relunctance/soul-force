@@ -39,7 +39,8 @@ class SoulEvolver:
         self,
         patterns: List[DiscoveredPattern],
         dry_run: Optional[bool] = None,
-        backup_type: str = "auto"
+        backup_type: str = "auto",
+        rich_diff: bool = False,  # v2.2.0: unified diff preview
     ) -> Dict[str, Any]:
         """
         Apply discovered patterns to target files.
@@ -48,6 +49,7 @@ class SoulEvolver:
             patterns: List of DiscoveredPattern objects to apply
             dry_run: If True, don't actually write (default from config)
             backup_type: "auto" or "manual" for backup naming
+            rich_diff: If True, produce unified diff preview in results
 
         Returns:
             Dict with results summary
@@ -56,6 +58,7 @@ class SoulEvolver:
             dry_run = self.config.is_dry_run
 
         self._changes_made = []
+        rich_diffs: Dict[str, str] = {}  # v2.2.0: file -> diff string
         results = {
             "dry_run": dry_run,
             "patterns_attempted": len(patterns),
@@ -65,6 +68,7 @@ class SoulEvolver:
             "files_updated": [],
             "backup_type": backup_type,
             "rollbacks": 0,
+            "rich_diffs": rich_diffs,  # v2.2.0
         }
 
         by_file: Dict[str, List[DiscoveredPattern]] = {}
@@ -83,6 +87,12 @@ class SoulEvolver:
                 if result["applied"] > 0:
                     results["files_updated"].append(filename)
                     results["patterns_applied"] += result["applied"]
+
+                    # v2.2.0: Generate rich diff preview
+                    if rich_diff:
+                        diff_text = self._generate_rich_diff(filename, file_patterns)
+                        rich_diffs[filename] = diff_text
+
                 results["patterns_skipped"] += result["skipped"]
                 results["rollbacks"] += result.get("rollbacks", 0)
                 if result.get("error"):
@@ -743,8 +753,174 @@ print(result.returncode)
 
         return "\n".join(lines)
 
-    def get_changelog(self, lang: str = "en") -> str:
-        """Get the changelog content."""
+    def _generate_rich_diff(
+        self,
+        filename: str,
+        patterns: List[DiscoveredPattern]
+    ) -> str:
+        """
+        Generate a unified-diff-style preview of what would change.
+
+        v2.2.0: Rich dry-run preview in unified diff format.
+
+        Args:
+            filename: Target file name
+            patterns: Patterns to apply
+
+        Returns:
+            Unified diff string
+        """
+        file_path = self.workspace / filename
+        if file_path.exists():
+            old_lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        else:
+            old_lines = []
+
+        # Simulate the new content
+        new_content_lines = list(old_lines)
+        for pattern in patterns:
+            block = pattern.to_markdown_block()
+            block_lines = block.splitlines(keepends=True)
+
+            if pattern.insertion_point == "append":
+                new_content_lines.extend(block_lines)
+            elif pattern.insertion_point == "top":
+                new_content_lines = block_lines + ["\n"] + new_content_lines
+            elif pattern.insertion_point.startswith("section:"):
+                # For section insert, just show where it would go
+                section_title = pattern.insertion_point[8:]
+                new_content_lines.append(f"\n# Would insert under ## {section_title}\n")
+                new_content_lines.extend(["    " + l for l in block_lines])
+
+        new_lines = new_content_lines
+
+        # Generate unified diff header
+        lines = []
+        lines.append(f"--- {filename}")
+        lines.append(f"+++ {filename}")
+
+        # Simple line-by-line diff: show insertions
+        old_len = len(old_lines)
+        new_len = len(new_lines)
+
+        if old_len == 0:
+            # New file
+            lines.append(f"@@ -0,0 +1,{new_len} @@")
+            for i, l in enumerate(new_lines):
+                lines.append(f"+{l.rstrip()}")
+        else:
+            # Changed file: show added lines with context
+            # Find SoulForge block markers to highlight
+            lines.append(f"@@ -{old_len} +{new_len} @@")
+            for i, l in enumerate(old_lines):
+                if "<!-- SoulForge Update" in l:
+                    lines.append(f" {l.rstrip()}")
+            for l in new_lines[-len(patterns) * 15:]:  # Show last N lines (new blocks)
+                if l.strip():
+                    lines.append(f"+{l.rstrip()}")
+
+        # Show the blocks to be inserted
+        lines.append("")
+        lines.append("Blocks to insert:")
+        lines.append("=" * 50)
+        for p in patterns:
+            conflict_marker = " ⚠️ CONFLICT" if p.has_conflict else ""
+            lines.append(f"\n[{p.target_file}] {p.summary}{conflict_marker}")
+            lines.append(f"  Insertion: {p.insertion_point}")
+            lines.append(f"  Confidence: {p.confidence:.1f}")
+            for block_line in p.to_markdown_block().splitlines():
+                lines.append(f"    {block_line}")
+
+        return "\n".join(lines)
+
+    def _format_visual_changelog(self, changelog_text: str) -> str:
+        """
+        Format changelog as an ASCII tree visualization.
+
+        v2.2.0: Changelog visualization.
+
+        Parses changelog entries and renders them as a tree:
+        v2.1.0 (2026-04-05)
+        ├── SOUL.md
+        │   └── +2 patterns (communication)
+        ├── USER.md
+        │   └── +1 pattern (preference)
+        └── IDENTITY.md
+            └── no changes
+
+        Args:
+            changelog_text: Raw changelog markdown text
+
+        Returns:
+            ASCII tree string
+        """
+        if not changelog_text:
+            return ""
+
+        lines = changelog_text.split("\n")
+        output_lines = []
+        current_version = None
+        version_entries: Dict[str, Dict[str, List[str]]] = {}
+
+        # Parse changelog into version -> file -> patterns
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # Version header: ## [X.Y.Z] - YYYY-MM-DD
+            version_match = re.match(r"##\s*\[([^\]]+)\]\s*-\s*(\d{4}-\d{2}-\d{2})", line)
+            if version_match:
+                current_version = version_match.group(1)
+                version_date = version_match.group(2)
+                version_entries[current_version] = {"_date": version_date, "_files": {}}
+                i += 1
+                continue
+
+            # Bullet: - **file**: pattern
+            if line.startswith("- **") and current_version:
+                bullet_match = re.match(r"-\s+\*\*([^*]+)\*\*:\s*(.+)", line)
+                if bullet_match:
+                    filename = bullet_match.group(1).strip()
+                    pattern = bullet_match.group(2).strip()
+                    if filename not in version_entries[current_version]["_files"]:
+                        version_entries[current_version]["_files"][filename] = []
+                    version_entries[current_version]["_files"][filename].append(pattern)
+
+            i += 1
+
+        # Render as ASCII tree
+        sorted_versions = sorted(version_entries.keys(), reverse=True)
+        for v in sorted_versions[:5]:  # Show last 5 versions
+            date = version_entries[v].get("_date", "")
+            files = version_entries[v].get("_files", {})
+            output_lines.append(f"{v} ({date})")
+
+            if not files:
+                output_lines.append("    └── no changes")
+                continue
+
+            sorted_files = sorted(files.keys())
+            for idx, filename in enumerate(sorted_files):
+                patterns = files[filename]
+                is_last_file = (idx == len(sorted_files) - 1)
+                connector = "└──" if is_last_file else "├──"
+                prefix = "    " if is_last_file else "│   "
+
+                if patterns:
+                    pattern_count = len(patterns)
+                    # Infer tag from first pattern if possible
+                    tags_match = re.search(r"\(([^)]+)\)", patterns[0])
+                    tag_str = f" ({tags_match.group(1)})" if tags_match else ""
+                    output_lines.append(f"{connector} {filename}")
+                    output_lines.append(f"{prefix}    └── +{pattern_count} pattern(s){tag_str}")
+                else:
+                    output_lines.append(f"{connector} {filename}")
+                    output_lines.append(f"{prefix}    └── no changes")
+
+        return "\n".join(output_lines)
+
+    def get_changelog(self, lang: str = "en", visual: bool = False) -> str:
+        """Get the changelog content, optionally as visual tree."""
         state_dir = Path(self.config.state_dir)
         filename = "CHANGELOG.md" if lang == "en" else "CHANGELOG.zh-CN.md"
         changelog_path = state_dir / filename
@@ -752,4 +928,9 @@ print(result.returncode)
         if not changelog_path.exists():
             return ""
 
-        return changelog_path.read_text(encoding="utf-8")
+        content = changelog_path.read_text(encoding="utf-8")
+
+        if visual:
+            return self._format_visual_changelog(content)
+
+        return content

@@ -12,22 +12,27 @@ Automatically analyzes memory files, discovers behavioral patterns, and evolves 
     soulforge.py restore [FILE] [--backup PATH] [--preview] [--all]
     soulforge.py reset [--workspace PATH]
     soulforge.py template [TEMPLATE]
-    soulforge.py changelog [--zh] [--full]
+    soulforge.py changelog [--zh] [--full] [--visual]
     soulforge.py cron [--every MINUTES]
     soulforge.py cron-set [--every N] [--show] [--remove]
-    soulforge.py review [--workspace PATH]
-    soulforge.py apply [--confirm] [--workspace PATH]
+    soulforge.py review [--workspace PATH] [--tag TAG] [--confidence LEVEL] [--interactive]
+    soulforge.py apply [--confirm] [--workspace PATH] [--interactive]
     soulforge.py backup --create [--workspace PATH]
+    soulforge.py ask "question" [--workspace PATH]
     soulforge.py help
 
 ## Examples
 
     soulforge.py run                    # Run evolution (with auto-rollback)
-    soulforge.py run --dry-run         # Preview mode (no writes)
+    soulforge.py run --dry-run         # Preview mode (no writes, unified diff preview)
     soulforge.py run --force           # Force apply all patterns (ignore confidence)
     soulforge.py run --notify          # Run with Feishu notification on completion
     soulforge.py review                 # Review mode: generate patterns without writing
+    soulforge.py review --tag preference # Filter patterns by tag
+    soulforge.py review --confidence high --tag error  # Combined filtering
+    soulforge.py review --interactive   # Interactive review: y/n per pattern
     soulforge.py apply --confirm       # Confirm and apply from review output
+    soulforge.py apply --interactive    # Apply from interactive review decisions
     soulforge.py backup --create        # Create manual snapshot
     soulforge.py status                # View current status (includes token budget)
     soulforge.py clean --expired       # Remove expired pattern blocks
@@ -36,6 +41,8 @@ Automatically analyzes memory files, discovers behavioral patterns, and evolves 
     soulforge.py config --show         # Show current configuration
     soulforge.py config --set max_token_budget=8192  # Set config value
     soulforge.py changelog             # View changelog
+    soulforge.py changelog --visual    # View changelog as ASCII tree
+    soulforge.py ask "What is my communication style?"  # Natural language query
 
 ---
 
@@ -53,9 +60,14 @@ Review mode: generate pattern analysis but don't write to files.
 Outputs all pending patterns, supports JSON export.
 Results saved to `.soulforge-{agent}/review/latest.json`.
 
+- `--tag TAG`: Filter patterns by tag (v2.2.0)
+- `--confidence LEVEL`: Filter by confidence level: high, medium, low (v2.2.0)
+- `--interactive`: Interactive review: y/n per pattern (v2.2.0)
+
 ### apply
 Apply patterns from review output after confirmation. Run `soulforge.py review` first.
 - `--confirm`: Confirm and apply all reviewed patterns
+- `--interactive`: Apply from interactive review decisions (v2.2.0)
 
 ### backup
 Backup management:
@@ -90,10 +102,20 @@ Generate standard templates for target files.
 - No args: List all available templates
 - With name: Show specific template content
 
-### changelog [--zh] [--full]
+### changelog [--zh] [--full] [--visual]
 Show evolution changelog.
 - `--zh`: Show Chinese version (default for zh-CN locale)
 - `--full`: Show full changelog (no truncation)
+- `--visual`: Show as ASCII tree visualization (v2.2.0)
+
+### ask "question"
+Ask a natural language question about the agent's identity/memory (v2.2.0).
+Synthesizes an answer from existing patterns and memory entries.
+Does NOT write any files. Does NOT trigger analysis.
+
+Example:
+    soulforge.py ask "What is my communication style?"
+    soulforge.py ask "What are my preferences for code reviews?"
 
 ### cron [--every MINUTES]
 Show cron setup help.
