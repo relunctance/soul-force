@@ -92,7 +92,41 @@ SoulForce 是自我进化闭环 L5 层（进化层）的核心组件。当前功
 
 ### P1 — 进化生态对接
 
-#### 3. 向 L6 qujin-editor 写进化建议
+#### 3. L5 ⇄ L0 双向闭环（反馈回路）
+
+**目标**：L5 进化结果写回 L0（hawk-bridge），影响未来 recall
+
+**实现方式**：
+- 成功修复 → 写回 hawk-bridge，高 importance（fix）
+- 失败修复 → 写回 hawk-bridge，标记为 low importance + 来源=verify-failure
+
+```python
+def write_back_to_hawkbridge(result):
+    if result['type'] == 'success':
+        hawk_bridge.add_memory(
+            text=f"[ISSUE-{result['issue_id']}] 修复成功: {result['pattern']}",
+            category='decision',
+            importance=0.9,  # 高优先级
+            source='auto-evolve-verify',
+            metadata={'issue_id': result['issue_id']}
+        )
+    else:
+        hawk_bridge.add_memory(
+            text=f"[ISSUE-{result['issue_id']}] 修复失败: {result['pattern']}",
+            category='other',
+            importance=0.3,  # 低优先级
+            source='auto-evolve-verify',
+            metadata={'issue_id': result['issue_id'], 'failure': True}
+        )
+```
+
+**效果**：
+- 下次 hawk recall 时，成功模式会优先被注入上下文
+- 失败模式会被降权，避免重蹈覆辙
+
+---
+
+#### 4. 向 L6 qujin-editor 写进化建议
 
 **目标**：当某类问题反复出现时，建议修订宪法
 
@@ -122,7 +156,23 @@ SoulForce 是自我进化闭环 L5 层（进化层）的核心组件。当前功
 
 ---
 
-#### 4. 进化事件知识库
+#### 5. 读 L1 inspect 报告（首次巡检结果）
+
+**目标**：L5 也应读取 L1 的首次巡检结果，作为进化的上下文输入
+
+**原因**：验证结果（solved/unsolved）需要结合首次巡检的问题描述，才能提炼完整模式
+
+```python
+def read_inspect_report(run_id):
+    """读取首次巡检报告，作为进化上下文"""
+    path = f"~/.hawk/inspect-reports/{run_id}.json"
+    with open(path) as f:
+        return json.load(f)
+```
+
+---
+
+#### 6. 进化事件知识库
 
 **目标**：记录每次进化的事件，供后续参考
 
@@ -196,13 +246,15 @@ SoulForce 是自我进化闭环 L5 层（进化层）的核心组件。当前功
 ## 实现顺序建议
 
 ```
-Step 1: read_verify_report()        ← 读取 auto-evolve 输出
-Step 2: write_success_pattern()      ← 成功模式写入
-Step 3: write_failure_trap()         ← 失败模式写入（坑）
-Step 4: evolution-log.jsonl          ← 进化事件知识库
-Step 5: 向 qujin-editor 写建议       ← L5 → L6 反馈
-Step 6: 自动触发机制                 ← cron/webhook/file_watch
-Step 7: 进化效果追踪                 ← metrics.json
+Step 1: read_verify_report()        ← 读取 auto-evolve verify 输出
+Step 2: read_inspect_report()       ← 读取 L1 首次巡检报告（完整上下文）
+Step 3: write_success_pattern()      ← 成功模式写入 SOUL/USER
+Step 4: write_failure_trap()        ← 失败模式写入 MEMORY（坑）
+Step 5: write_back_to_hawkbridge()   ← L5 → L0 写回反馈回路
+Step 6: evolution-log.jsonl          ← 进化事件知识库
+Step 7: 向 qujin-editor 写建议       ← L5 → L6 反馈
+Step 8: 自动触发机制                 ← cron/webhook/file_watch
+Step 9: 进化效果追踪                 ← metrics.json
 ```
 
 ---
@@ -210,14 +262,24 @@ Step 7: 进化效果追踪                 ← metrics.json
 ## 参考架构
 
 ```
+L0 记忆层（hawk-bridge）
+    ↓ 上下文触发
+L1 巡检层（auto-evolve inspect）
+    ↓ 输出 inspect-reports/{run_id}.json
 L4 验证层（auto-evolve verify）
     ↓ 输出 verify-reports/{run_id}.json
 L5 进化层（soul-force）
-    ↓ 读取报告
+    ← 读取 L1 inspect 报告（问题上下文）
+    ← 读取 L4 verify 报告（验证结果）
     ↓ 成功 → SOUL.md / 失败 → MEMORY.md（坑）
     ↓ 同时 → evolution-suggestions.json（向 L6 写建议）
     ↓ 记录 → evolution-log.jsonl（进化知识库）
+    ↓ 反馈 → hawk-bridge 写回（成功高优/失败低优）
 L6 知识层（qujin-editor）
-    ↓ 读取 evolution-suggestions.json
+    ← 读取 evolution-suggestions.json
     ↓ 决定是否修订宪法
 ```
+
+**关键：L5 ⇄ L0 双向闭环**
+- L5 成功/失败结果写回 hawk-bridge
+- hawk-bridge 的 recall 感知进化结果，影响未来注入的记忆优先级
