@@ -386,3 +386,68 @@ SOUL.md 进化路径
 - soul-force 写入了 `evolution-failure` 记忆
 - 该记忆关联的模式在 SOUL 中存在
 - 自动降级该模式为"已废弃"
+
+---
+
+## 细粒度补充（v2.5+）
+
+### R. Team SOUL（团队共享学习）
+
+**目标**：多 Agent 的学习成果汇入"团队 SOUL"
+
+**实现**：
+- `soulforge team-sync` — 把 personal SOUL 中的 team-visible 模式同步到团队共享区
+- 团队共享区供所有 Agent 读取，但只有唐僧可写
+
+---
+
+### S. SOUL 模板生成
+
+**目标**：新 Agent 启动时，SoulForce 自动生成基础模板
+
+**实现**：
+- `soulforge init --template developer` — 生成开发者角色模板
+- `soulforge init --template pm` — 生成产品经理模板
+- 基于 project-standard 的角色描述自动生成
+
+---
+
+### T. Evolution Rollback Queue
+
+**目标**：一次进化失败时，批量回滚所有改动
+
+**实现**：
+```bash
+soulforge rollback --all  # 回滚上次所有改动
+soulforge rollback --last 3  # 回滚最近 3 次进化
+```
+
+---
+
+### U. Pattern Schema 验证
+
+**目标**：写入前验证格式，避免畸形 pattern 污染 SOUL
+
+**验证规则**：
+- 必须有 `timestamp`
+- 必须有 `pattern` 字段
+- `tags` 必须是数组
+- `confidence` 必须在 0-1 范围
+
+---
+
+### V. SOUL 健康仪表盘
+
+**目标**：覆盖率/冲突率/平均寿命 综合打分
+
+**命令**：`soulforge health`
+
+**输出**：
+```
+SOUL 健康报告：
+- 覆盖率: 0.75 (75% 工作场景有模式覆盖)
+- 冲突率: 0.05 (5% 模式对存在矛盾)
+- 平均寿命: 42 天 (模式从创建到废弃的平均时长)
+- 进化速度: 3.2 次/月
+综合评分: 82/100 ✓
+```
