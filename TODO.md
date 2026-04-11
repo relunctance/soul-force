@@ -451,3 +451,45 @@ SOUL 健康报告：
 - 进化速度: 3.2 次/月
 综合评分: 82/100 ✓
 ```
+
+---
+
+## 多租户支持（v2.6+）
+
+### MT-1. per-tenant SOUL/USER/IDENTITY
+
+**目标**：每个租户有独立的身份文件
+
+```
+~/.soul-force/
+  tenants/
+    {tenant_id}/
+      SOUL.md
+      USER.md
+      IDENTITY.md
+      evolution-log.jsonl
+      evolution-suggestions.json
+```
+
+---
+
+### MT-2. Global Learnings 共享
+
+**目标**：厂商维护的 Global learnings 所有租户共享
+
+```python
+# 读取优先级
+def load_learnings(tenant_id):
+    global_path = "~/.soul-force/global/learnings.jsonl"
+    tenant_path = f"~/.soul-force/tenants/{tenant_id}/learnings.jsonl"
+    # 合并：租户私有 + Global（租户只读 Global）
+```
+
+---
+
+### MT-3. tenant_id 隔离审核
+
+**目标**：qujin-editor 审核时按 tenant_id 隔离
+
+- 只有 tenant_id 匹配才能审核该租户的进化建议
+- Global constitution 修订需要厂商权限
